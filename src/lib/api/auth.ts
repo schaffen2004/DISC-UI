@@ -13,6 +13,16 @@ export type LoginResult = {
   referralCredentials?: unknown;
 };
 
+export type RegisterPayload = {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  referralCode?: string;
+};
+
 export type UserProfile = {
   id: string;
   email: string;
@@ -32,6 +42,14 @@ export type UserProfile = {
 
 export function login(payload: LoginPayload) {
   return apiFetch<LoginResult>("/auth/login", {
+    method: "POST",
+    body: payload,
+    auth: false,
+  });
+}
+
+export function register(payload: RegisterPayload) {
+  return apiFetch<null>("/auth/register", {
     method: "POST",
     body: payload,
     auth: false,

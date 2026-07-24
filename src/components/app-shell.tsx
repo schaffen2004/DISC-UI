@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -15,17 +16,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/messages";
 
-const CRUMBS: Record<string, string> = {
-  "": "Dashboard",
-  employees: "Employees",
-  assessments: "Assessments",
-  questionnaires: "Questionnaires",
-  reports: "Reports",
-  analytics: "Analytics",
-  new: "New",
-  result: "Result",
-  questionnaire: "Questionnaire",
+const CRUMB_KEYS: Record<string, MessageKey> = {
+  "": "nav.dashboard",
+  employees: "nav.employees",
+  assessments: "nav.assessments",
+  questionnaires: "nav.questionnaires",
+  reports: "nav.reports",
+  analytics: "nav.analytics",
+  new: "nav.new",
+  result: "nav.result",
+  questionnaire: "nav.questionnaire",
+  verify: "nav.verify",
 };
 
 function useDarkMode() {
@@ -41,9 +45,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const parts = path.split("/").filter(Boolean);
   const { dark, setDark } = useDarkMode();
   const { displayName, user: authUser, logout, isAuthenticated } = useAuth();
+  const t = useT();
 
-  const name = isAuthenticated ? displayName : "Guest";
-  const subtitle = authUser?.email ?? "Sign in to continue";
+  const name = isAuthenticated ? displayName : t("common.guest");
+  const subtitle = authUser?.email ?? t("common.signInToContinue");
   const initials =
     name
       .split(/\s+/)
@@ -62,58 +67,70 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarTrigger />
             <nav className="hidden md:flex items-center text-sm text-muted-foreground min-w-0">
               <Link to="/" className="hover:text-foreground transition-colors">
-                Home
+                {t("nav.home")}
               </Link>
               {parts.map((p, i) => (
                 <span key={i} className="flex items-center min-w-0">
                   <ChevronRight className="h-3.5 w-3.5 mx-1 opacity-60" />
                   <span className="truncate text-foreground/80 capitalize">
-                    {CRUMBS[p] ?? p}
+                    {CRUMB_KEYS[p] ? t(CRUMB_KEYS[p]) : p}
                   </span>
                 </span>
               ))}
             </nav>
             <div className="ml-auto flex items-center gap-2">
+              <LanguageSwitcher />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setDark(!dark)}
-                aria-label="Toggle theme"
+                aria-label={t("common.toggleTheme")}
               >
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("common.notifications")}
+                className="relative"
+              >
                 <Bell className="h-4 w-4" />
                 <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                        {user.initials}
-                      </AvatarFallback>
-                    </Avatar>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="space-y-0.5">
-                    <div>{user.name}</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {user.subtitle}
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      logout();
-                      window.location.assign("/login");
-                    }}
-                  >
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {isAuthenticated ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                          {user.initials}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="space-y-0.5">
+                      <div>{user.name}</div>
+                      <div className="text-xs font-normal text-muted-foreground">
+                        {user.subtitle}
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        logout();
+                        window.location.assign("/login");
+                      }}
+                    >
+                      {t("common.signOut")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/login">{t("auth.signIn")}</Link>
+                </Button>
+              )}
             </div>
           </header>
           <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">{children}</main>

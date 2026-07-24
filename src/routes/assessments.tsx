@@ -31,13 +31,12 @@ import {
   getSessionOverview,
   listSessions,
   openSession,
-  participantStatusLabel,
-  sessionStatusLabel,
   updateSessionParticipants,
   type DiscSessionOverview,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
 import { listUsers, userDisplayName, userInitials, type UserListItem } from "@/lib/api/users";
+import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assessments")({
@@ -70,6 +69,7 @@ function AssessmentsLayout() {
 
 function AssessmentsPage() {
   const { isAuthenticated, isLoading: authLoading, isStaff, role } = useAuth();
+  const t = useT();
   const queryClient = useQueryClient();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const {
@@ -131,18 +131,20 @@ function AssessmentsPage() {
     <div className="space-y-6">
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Assessments</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+            {t("assessments.title")}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {role?.toUpperCase() === "OPERATOR"
-              ? "Sessions you created or were invited to."
-              : "Assessment campaigns across your organization."}
+              ? t("assessments.subtitleOperator")
+              : t("assessments.subtitleAll")}
           </p>
         </div>
         {isStaff && (
           <Button size="sm" asChild>
             <Link to="/assessments/new">
               <Plus className="h-4 w-4" />
-              New Assessment
+              {t("assessments.new")}
             </Link>
           </Button>
         )}
@@ -150,18 +152,18 @@ function AssessmentsPage() {
 
       {!isAuthenticated && !authLoading && (
         <Card className="p-6 text-sm text-muted-foreground">
-          Please{" "}
+          {t("assessments.signInPrompt").split("{link}")[0]}
           <Link to="/login" className="font-medium text-primary hover:underline">
-            sign in
-          </Link>{" "}
-          to load assessments from the API.
+            {t("assessments.signInLink")}
+          </Link>
+          {t("assessments.signInPrompt").split("{link}")[1]}
         </Card>
       )}
 
       {(authLoading || (isAuthenticated && isLoading)) && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading sessions…
+          {t("assessments.loading")}
         </div>
       )}
 
@@ -171,7 +173,7 @@ function AssessmentsPage() {
             {error instanceof Error ? error.message : "Failed to load sessions"}
           </p>
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            Retry
+            {t("common.retry")}
           </Button>
         </Card>
       )}
@@ -184,7 +186,7 @@ function AssessmentsPage() {
 
       {isAuthenticated && !isLoading && !isError && sessions.length === 0 && (
         <Card className="p-10 text-center text-sm text-muted-foreground">
-          No assessment sessions yet. Create one to get started.
+          {t("assessments.empty")}
         </Card>
       )}
 
@@ -223,15 +225,22 @@ function AssessmentsPage() {
                       </CardDescription>
                     </div>
                     <Badge variant="outline" className={statusStyle[a.status]}>
-                      {sessionStatusLabel[a.status]}
+                      {t(sessionStatusMessageKey(a.status))}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="text-xs text-muted-foreground">
-                    {a.participantCount} participant{a.participantCount === 1 ? "" : "s"}
+                    {t(
+                      a.participantCount === 1
+                        ? "assessments.participants"
+                        : "assessments.participants_plural",
+                      { count: a.participantCount },
+                    )}
                     {a.myParticipant
-                      ? ` · You: ${participantStatusLabel[a.myParticipant.status]}`
+                      ? ` · ${t("assessments.youStatus", {
+                          status: t(participantStatusMessageKey(a.myParticipant.status)),
+                        })}`
                       : ""}
                   </div>
                   <div className="flex items-center justify-between gap-2">
@@ -255,13 +264,13 @@ function AssessmentsPage() {
                       {manage && (
                         <Button variant="outline" size="sm" onClick={() => openDetails(a.id)}>
                           <Eye className="h-4 w-4" />
-                          Details
+                          {t("common.details")}
                         </Button>
                       )}
                       {canTake && (
                         <Button variant="outline" size="sm" asChild>
                           <Link to="/assessments/questionnaire" search={{ sessionId: a.id }}>
-                            Take
+                            {t("common.take")}
                           </Link>
                         </Button>
                       )}
@@ -271,7 +280,7 @@ function AssessmentsPage() {
                             to="/assessments/result"
                             search={{ participantId: a.myParticipant.id }}
                           >
-                            Result
+                            {t("common.result")}
                           </Link>
                         </Button>
                       )}
@@ -286,7 +295,7 @@ function AssessmentsPage() {
                           ) : (
                             <Unlock className="h-4 w-4" />
                           )}
-                          {a.status === "CLOSED" ? "Reopen" : "Open"}
+                          {a.status === "CLOSED" ? t("common.reopen") : t("common.open")}
                         </Button>
                       )}
                       {canClose && (
@@ -301,7 +310,7 @@ function AssessmentsPage() {
                           ) : (
                             <Lock className="h-4 w-4" />
                           )}
-                          Close
+                          {t("common.close")}
                         </Button>
                       )}
                       {manage && (
@@ -322,16 +331,18 @@ function AssessmentsPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openDetails(a.id)}>
-                              View details
+                              {t("common.viewDetails")}
                             </DropdownMenuItem>
                             {canOpen && (
                               <DropdownMenuItem onClick={() => onChangeStatus(a, "OPEN")}>
-                                {a.status === "CLOSED" ? "Reopen session" : "Open session"}
+                                {a.status === "CLOSED"
+                                  ? t("assessments.reopenSession")
+                                  : t("assessments.openSession")}
                               </DropdownMenuItem>
                             )}
                             {canClose && (
                               <DropdownMenuItem onClick={() => onChangeStatus(a, "CLOSED")}>
-                                Close session
+                                {t("assessments.closeSession")}
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -352,14 +363,14 @@ function AssessmentsPage() {
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{selectedSession?.title ?? "Session details"}</DialogTitle>
-            <DialogDescription>Basic information and current session state.</DialogDescription>
+            <DialogTitle>{selectedSession?.title ?? t("assessments.sessionDetails")}</DialogTitle>
+            <DialogDescription>{t("assessments.sessionDetailsDesc")}</DialogDescription>
           </DialogHeader>
 
           {overviewQuery.isLoading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading session details…
+              {t("assessments.loadingDetails")}
             </div>
           ) : overviewQuery.isError ? (
             <p className="text-sm text-destructive">
@@ -375,7 +386,7 @@ function AssessmentsPage() {
                   <div className="text-xs text-muted-foreground">ID: {overviewQuery.data.id}</div>
                 </div>
                 <Badge variant="outline" className={statusStyle[overviewQuery.data.status]}>
-                  {sessionStatusLabel[overviewQuery.data.status]}
+                  {t(sessionStatusMessageKey(overviewQuery.data.status))}
                 </Badge>
               </div>
 
@@ -387,17 +398,31 @@ function AssessmentsPage() {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <InfoItem
-                  label="Participants"
+                  label={t("assessments.participantsLabel")}
                   value={String(overviewQuery.data.participantCount)}
                 />
-                <InfoItem label="Owner" value={overviewQuery.data.owner?.email ?? "—"} />
-                <InfoItem label="Created" value={formatDateTime(overviewQuery.data.createdAt)} />
-                <InfoItem label="Opened" value={formatDateTime(overviewQuery.data.openedAt)} />
-                <InfoItem label="Closed" value={formatDateTime(overviewQuery.data.closedAt)} />
+                <InfoItem
+                  label={t("assessments.owner")}
+                  value={overviewQuery.data.owner?.email ?? "—"}
+                />
+                <InfoItem
+                  label={t("assessments.created")}
+                  value={formatDateTime(overviewQuery.data.createdAt)}
+                />
+                <InfoItem
+                  label={t("assessments.opened")}
+                  value={formatDateTime(overviewQuery.data.openedAt)}
+                />
+                <InfoItem
+                  label={t("assessments.closed")}
+                  value={formatDateTime(overviewQuery.data.closedAt)}
+                />
               </div>
 
               <div className="rounded-lg border p-3">
-                <div className="mb-2 text-sm font-medium">Participants status</div>
+                <div className="mb-2 text-sm font-medium">
+                  {t("assessments.participantsStatus")}
+                </div>
                 <div className="max-h-56 space-y-2 overflow-y-auto text-sm">
                   {overviewQuery.data.participants.map((participant) => {
                     const canVerify = participant.status === "SUBMITTED";
@@ -417,7 +442,7 @@ function AssessmentsPage() {
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant="outline">
-                            {participantStatusLabel[participant.status]}
+                            {t(participantStatusMessageKey(participant.status))}
                           </Badge>
                           {canVerify && (
                             <Button variant="outline" size="sm" asChild>
@@ -428,7 +453,7 @@ function AssessmentsPage() {
                                   participantId: participant.id,
                                 }}
                               >
-                                Verify
+                                {t("common.verify")}
                               </Link>
                             </Button>
                           )}
@@ -438,7 +463,7 @@ function AssessmentsPage() {
                                 to="/assessments/result"
                                 search={{ participantId: participant.id }}
                               >
-                                Result
+                                {t("common.result")}
                               </Link>
                             </Button>
                           )}
@@ -447,11 +472,10 @@ function AssessmentsPage() {
                     );
                   })}
                   {overviewQuery.data.participants.length === 0 && (
-                    <p className="text-muted-foreground">No participants assigned.</p>
+                    <p className="text-muted-foreground">{t("assessments.noParticipants")}</p>
                   )}
                 </div>
               </div>
-
               {canManageStatus(overviewQuery.data) && overviewQuery.data.status === "OPEN" && (
                 <InviteParticipantsPanel session={overviewQuery.data} />
               )}
@@ -470,7 +494,9 @@ function AssessmentsPage() {
                       ) : (
                         <Unlock className="h-4 w-4" />
                       )}
-                      {overviewQuery.data.status === "CLOSED" ? "Reopen session" : "Open session"}
+                      {overviewQuery.data.status === "CLOSED"
+                        ? t("assessments.reopenSession")
+                        : t("assessments.openSession")}
                     </Button>
                   )}
                   {overviewQuery.data.status === "OPEN" && (
@@ -485,7 +511,7 @@ function AssessmentsPage() {
                       ) : (
                         <Lock className="h-4 w-4" />
                       )}
-                      Close session
+                      {t("assessments.closeSession")}
                     </Button>
                   )}
                 </div>
@@ -500,6 +526,7 @@ function AssessmentsPage() {
 
 function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) {
   const { isAuthenticated, user } = useAuth();
+  const t = useT();
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
@@ -507,8 +534,8 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setSearch(q), 300);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setSearch(q), 300);
+    return () => window.clearTimeout(timer);
   }, [q]);
 
   // Reset selection when switching sessions
@@ -580,17 +607,15 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
     <div className="space-y-3 rounded-lg border p-3">
       <div className="flex items-center gap-2">
         <UserPlus className="h-4 w-4 text-primary" />
-        <div className="text-sm font-medium">Invite participants</div>
+        <div className="text-sm font-medium">{t("assessments.inviteTitle")}</div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Session is open — add more invitees without removing existing participants.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("assessments.inviteHint")}</p>
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           className="pl-8"
-          placeholder="Search users by name, email…"
+          placeholder={t("assessments.searchUsers")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -598,7 +623,7 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
 
       {usersQuery.isLoading && (
         <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading users…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
         </div>
       )}
 
@@ -609,7 +634,9 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
       )}
 
       {!usersQuery.isLoading && !usersQuery.isError && candidates.length === 0 && (
-        <p className="py-2 text-center text-sm text-muted-foreground">No more users to invite.</p>
+        <p className="py-2 text-center text-sm text-muted-foreground">
+          {t("assessments.noMoreUsers")}
+        </p>
       )}
 
       <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
@@ -641,7 +668,9 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
       {formError && <p className="text-sm text-destructive">{formError}</p>}
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+        <span className="text-xs text-muted-foreground">
+          {t("assessments.selected", { count: selectedIds.length })}
+        </span>
         <Button
           size="sm"
           onClick={onInvite}
@@ -652,7 +681,7 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
           ) : (
             <UserPlus className="h-4 w-4" />
           )}
-          Invite
+          {t("common.invite")}
         </Button>
       </div>
     </div>

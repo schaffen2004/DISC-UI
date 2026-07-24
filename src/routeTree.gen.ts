@@ -15,6 +15,7 @@ import { Route as AssessmentsRouteImport } from './routes/assessments'
 import { Route as EmployeesRouteImport } from './routes/employees'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as QuestionnairesRouteImport } from './routes/questionnaires'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as AssessmentsNewRouteImport } from './routes/assessments.new'
 import { Route as AssessmentsQuestionnaireRouteImport } from './routes/assessments.questionnaire'
@@ -50,6 +51,11 @@ const LoginRoute = LoginRouteImport.update({
 const QuestionnairesRoute = QuestionnairesRouteImport.update({
   id: '/questionnaires',
   path: '/questionnaires',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/employees': typeof EmployeesRoute
   '/login': typeof LoginRoute
   '/questionnaires': typeof QuestionnairesRoute
+  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRouteWithChildren
   '/assessments/new': typeof AssessmentsNewRoute
   '/assessments/questionnaire': typeof AssessmentsQuestionnaireRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/employees': typeof EmployeesRoute
   '/login': typeof LoginRoute
   '/questionnaires': typeof QuestionnairesRoute
+  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRouteWithChildren
   '/assessments/new': typeof AssessmentsNewRoute
   '/assessments/questionnaire': typeof AssessmentsQuestionnaireRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/employees': typeof EmployeesRoute
   '/login': typeof LoginRoute
   '/questionnaires': typeof QuestionnairesRoute
+  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRouteWithChildren
   '/assessments/new': typeof AssessmentsNewRoute
   '/assessments/questionnaire': typeof AssessmentsQuestionnaireRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/employees'
     | '/login'
     | '/questionnaires'
+    | '/register'
     | '/reports'
     | '/assessments/new'
     | '/assessments/questionnaire'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/employees'
     | '/login'
     | '/questionnaires'
+    | '/register'
     | '/reports'
     | '/assessments/new'
     | '/assessments/questionnaire'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/employees'
     | '/login'
     | '/questionnaires'
+    | '/register'
     | '/reports'
     | '/assessments/new'
     | '/assessments/questionnaire'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   EmployeesRoute: typeof EmployeesRoute
   LoginRoute: typeof LoginRoute
   QuestionnairesRoute: typeof QuestionnairesRoute
+  RegisterRoute: typeof RegisterRoute
   ReportsRoute: typeof ReportsRouteWithChildren
 }
 
@@ -224,6 +237,13 @@ declare module '@tanstack/react-router' {
       path: '/questionnaires'
       fullPath: '/questionnaires'
       preLoaderRoute: typeof QuestionnairesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -307,6 +327,7 @@ const rootRouteChildren: RootRouteChildren = {
   EmployeesRoute: EmployeesRoute,
   LoginRoute: LoginRoute,
   QuestionnairesRoute: QuestionnairesRoute,
+  RegisterRoute: RegisterRoute,
   ReportsRoute: ReportsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
