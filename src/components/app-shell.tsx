@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Bell, ChevronRight, Moon, Sun } from "lucide-react";
+import { ChevronRight, Moon, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
@@ -87,15 +87,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 aria-label={t("common.toggleTheme")}
               >
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("common.notifications")}
-                className="relative"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
               </Button>
               {isAuthenticated ? (
                 <DropdownMenu>

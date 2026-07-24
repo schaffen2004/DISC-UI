@@ -143,10 +143,10 @@ function QuestionnairesPage() {
                   </div>
                   <div className="rounded-lg border p-3">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Layers className="h-3.5 w-3.5" /> Levels
+                      <Layers className="h-3.5 w-3.5" /> Sections
                     </div>
                     <div className="mt-1 text-lg font-semibold tabular-nums">
-                      {template.levels.join(", ")}
+                      {template.levels.length}
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
@@ -170,12 +170,13 @@ function QuestionnairesPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Question preview</CardTitle>
-                <CardDescription>Browse questions by DISC level.</CardDescription>
+                <CardDescription>Browse questions by DISC section.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {template.levelSummary.map((item) => {
                     const active = activeLevel === item.level;
+                    const label = discLevelLabel[item.level] ?? `Section ${item.level}`;
                     return (
                       <button
                         key={item.level}
@@ -188,7 +189,7 @@ function QuestionnairesPage() {
                             : "hover:bg-muted text-muted-foreground",
                         )}
                       >
-                        Level {item.level}
+                        {label}
                         <span className={cn("ml-1.5", active ? "opacity-80" : "opacity-60")}>
                           ({item.count})
                         </span>
@@ -200,7 +201,7 @@ function QuestionnairesPage() {
                 {activeLevel != null && (
                   <div className="rounded-lg border bg-muted/20 px-4 py-3">
                     <div className="text-sm font-medium">
-                      Level {activeLevel} · {discLevelLabel[activeLevel] ?? "Unknown"}
+                      {discLevelLabel[activeLevel] ?? `Section ${activeLevel}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {levelCount} question{levelCount === 1 ? "" : "s"}
@@ -211,7 +212,7 @@ function QuestionnairesPage() {
                 <div className="space-y-3">
                   {levelQuestions.length === 0 && (
                     <p className="py-6 text-center text-sm text-muted-foreground">
-                      No questions for this level.
+                      No questions for this section.
                     </p>
                   )}
                   {levelQuestions.map((q, idx) => (
@@ -219,7 +220,7 @@ function QuestionnairesPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{String(idx + 1).padStart(2, "0")}</Badge>
                         <Badge variant="secondary">
-                          Level {q.level} · {discLevelLabel[q.level] ?? ""}
+                          {discLevelLabel[q.level] ?? `Section ${q.level}`}
                         </Badge>
                         <span className="text-xs text-muted-foreground">source #{q.sourceId}</span>
                       </div>
