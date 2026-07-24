@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pass VITE_API_URL during build stage because Vite inlines VITE_* environment
+        # variables into the client-side JavaScript bundle during the build process.
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8001}
+    container_name: disc-frontend-staging
+    restart: unless-stopped
+    ports:
+      - "8007:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8001}
