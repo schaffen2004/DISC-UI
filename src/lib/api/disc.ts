@@ -228,7 +228,7 @@ export type DiscVerification = {
 };
 
 export function saveAssessmentDraft(sessionId: string, payload: SaveDiscAnswersPayload) {
-  return apiFetch(`/disc/sessions/${sessionId}/assessment/draft`, {
+  return apiFetch<{ answerCount: number }>(`/disc/sessions/${sessionId}/assessment/draft`, {
     method: "PUT",
     body: payload,
   });
@@ -304,7 +304,7 @@ export async function downloadResultPdf(
 export const sessionStatusLabel: Record<DiscSessionStatus, string> = {
   DRAFT: "Draft",
   OPEN: "Active",
-  CLOSED: "Completed",
+  CLOSED: "Closed",
 };
 
 export const participantStatusLabel: Record<DiscParticipantStatus, string> = {

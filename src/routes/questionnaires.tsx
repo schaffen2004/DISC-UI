@@ -9,8 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
+import { discLevelMessageKey, useT } from "@/lib/i18n";
+import { messages } from "@/lib/i18n/messages";
 import {
-  discLevelLabel,
   getTemplate,
   type DiscQuestion,
 } from "@/lib/api/disc";
@@ -34,11 +35,17 @@ function formatDate(value?: string | null) {
 
 function QuestionnairesPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const t = useT();
   const [activeLevel, setActiveLevel] = useState<number | null>(null);
 
+  const levelLabel = (level: number) => {
+    const key = discLevelMessageKey(level);
+    return key in messages.en ? t(key) : t("disc.sectionFallback", { level });
+  };
+
   const templateQuery = useQuery({
-    queryKey: ["disc", "template"],
-    queryFn: () => getTemplate(),
+    queryKey: ["disc", "template", { includeManager: true }],
+    queryFn: () => getTemplate({ includeManager: true }),
     enabled: isAuthenticated,
   });
 
@@ -176,7 +183,7 @@ function QuestionnairesPage() {
                 <div className="flex flex-wrap gap-2">
                   {template.levelSummary.map((item) => {
                     const active = activeLevel === item.level;
-                    const label = discLevelLabel[item.level] ?? `Section ${item.level}`;
+                    const label = levelLabel(item.level);
                     return (
                       <button
                         key={item.level}
@@ -201,7 +208,7 @@ function QuestionnairesPage() {
                 {activeLevel != null && (
                   <div className="rounded-lg border bg-muted/20 px-4 py-3">
                     <div className="text-sm font-medium">
-                      {discLevelLabel[activeLevel] ?? `Section ${activeLevel}`}
+                      {levelLabel(activeLevel)}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {levelCount} question{levelCount === 1 ? "" : "s"}
@@ -220,7 +227,7 @@ function QuestionnairesPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{String(idx + 1).padStart(2, "0")}</Badge>
                         <Badge variant="secondary">
-                          {discLevelLabel[q.level] ?? `Section ${q.level}`}
+                          {levelLabel(q.level)}
                         </Badge>
                         <span className="text-xs text-muted-foreground">source #{q.sourceId}</span>
                       </div>

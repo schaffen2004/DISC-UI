@@ -45,12 +45,11 @@ import {
   getSessionOverview,
   listSessions,
   filterSessionsForRole,
-  participantStatusLabel,
   primaryDiscType,
-  sessionStatusLabel,
   type DiscHistoryItem,
   type DiscSessionListItem,
 } from "@/lib/api/disc";
+import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -112,7 +111,7 @@ function buildStatusDistribution(sessions: DiscSessionListItem[]) {
   for (const s of sessions) counts[s.status] += 1;
   return [
     { type: "OPEN", label: "Active", value: counts.OPEN, color: "var(--primary)" },
-    { type: "CLOSED", label: "Completed", value: counts.CLOSED, color: "var(--disc-s)" },
+    { type: "CLOSED", label: "Closed", value: counts.CLOSED, color: "var(--disc-s)" },
     { type: "DRAFT", label: "Draft", value: counts.DRAFT, color: "var(--muted-foreground)" },
   ].filter((d) => d.value > 0);
 }
@@ -222,6 +221,7 @@ function EmployeeDashboard({
   isLoading,
 }: DashboardData) {
   const { displayName } = useAuth();
+  const t = useT();
   const firstName = displayName.split(/\s+/)[0] || "there";
 
   const mySessions = useMemo(
@@ -301,8 +301,8 @@ function EmployeeDashboard({
                   {activePending.title}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {participantStatusLabel[activePending.myParticipant!.status]} · Session{" "}
-                  {sessionStatusLabel[activePending.status]}
+                  {t(participantStatusMessageKey(activePending.myParticipant!.status))} ·{" "}
+                  {t(sessionStatusMessageKey(activePending.status))}
                   {pending.length > 1 ? ` · +${pending.length - 1} more` : ""}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -546,6 +546,7 @@ function StaffDashboard({
   overviewsLoading,
 }: DashboardData) {
   const { displayName } = useAuth();
+  const t = useT();
   const firstName = displayName.split(/\s+/)[0] || "there";
 
   const openSessions = sessions.filter((s) => s.status === "OPEN");
@@ -927,7 +928,7 @@ function StaffDashboard({
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{u.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {u.participantCount} participants · {sessionStatusLabel[u.status]}
+                      {u.participantCount} participants · {t(sessionStatusMessageKey(u.status))}
                     </div>
                   </div>
                   <Button variant="outline" size="sm" asChild>
@@ -965,6 +966,7 @@ function StaffDashboard({
 }
 
 function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
+  const t = useT();
   const status = session.myParticipant?.status;
   const pending = isPendingParticipant(status);
   return (
@@ -977,7 +979,7 @@ function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{session.title}</div>
         <div className="text-xs text-muted-foreground">
-          {status ? participantStatusLabel[status] : "—"} ·{" "}
+          {status ? t(participantStatusMessageKey(status)) : "—"} ·{" "}
           {new Date(session.createdAt).toLocaleDateString()}
         </div>
       </div>
@@ -999,6 +1001,7 @@ function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
 }
 
 function SessionActivityRow({ session }: { session: DiscSessionListItem }) {
+  const t = useT();
   return (
     <div className="flex items-start gap-3">
       <Avatar className="h-8 w-8">
@@ -1010,7 +1013,7 @@ function SessionActivityRow({ session }: { session: DiscSessionListItem }) {
         <div className="truncate">
           <span className="font-medium">{session.title}</span>{" "}
           <span className="text-muted-foreground">is</span>{" "}
-          <span className="font-medium">{sessionStatusLabel[session.status]}</span>
+          <span className="font-medium">{t(sessionStatusMessageKey(session.status))}</span>
         </div>
         <div className="text-xs text-muted-foreground">
           {session.participantCount} participants ·{" "}

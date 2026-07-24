@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Printer, Share2, ArrowRight, Loader2 } from "lucide-react";
+import { Download, Printer, ArrowRight, Loader2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
   PolarAngleAxis,
@@ -22,6 +22,8 @@ import { discFullName, discProfile } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { downloadResultPdf, getResult, primaryDiscType } from "@/lib/api/disc";
+import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const searchSchema = z.object({
   participantId: z.string().uuid().optional(),
@@ -46,6 +48,7 @@ export const Route = createFileRoute("/assessments/result")({
 function ResultPage() {
   const { participantId } = Route.useSearch();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const t = useT();
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
@@ -202,24 +205,23 @@ function ResultPage() {
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0">
             <div className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              Assessment Result
+              {t("result.title")}
             </div>
             <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight">
-              {data?.session.title ?? "Your DISC profile"}
+              {data?.session.title ?? t("result.yourProfile")}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Completed {completedAt} · Profile {result.dominantProfile} · Algo{" "}
-              {result.algorithmVersion}
+              {t("result.completed", {
+                date: completedAt,
+                profile: result.dominantProfile,
+                algo: result.algorithmVersion,
+              })}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm">
-              <Share2 className="h-4 w-4" />
-              Share
-            </Button>
             <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Printer className="h-4 w-4" />
-              Print
+              {t("common.print")}
             </Button>
             <Button size="sm" onClick={onDownloadPdf} disabled={pdfLoading}>
               {pdfLoading ? (
@@ -227,7 +229,7 @@ function ResultPage() {
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              Download PDF
+              {t("common.downloadPdf")}
             </Button>
           </div>
         </header>
@@ -321,29 +323,84 @@ function ResultPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {(
             [
-              { label: "Adaptive", level: result.adaptive },
-              { label: "Natural", level: result.natural },
-              { label: "Pressure", level: result.pressure },
-              { label: "Motivator / Fear", level: result.motivatorFear },
+              { label: t("disc.level.1"), level: result.adaptive },
+              { label: t("disc.level.2"), level: result.natural },
+              { label: t("disc.level.3"), level: result.pressure },
+              { label: t("disc.level.4"), level: result.motivatorFear },
               ...(result.managerValidation
-                ? [{ label: "Manager validation", level: result.managerValidation }]
+                ? [{ label: t("disc.level.5"), level: result.managerValidation }]
                 : []),
             ] as const
-          ).map(({ label, level }) => (
-            <Card key={label}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{label}</CardTitle>
-                <CardDescription>{level?.dominantProfile ?? "—"}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-1">
-                {(["D", "I", "S", "C"] as const).map((k) => (
-                  <Badge key={k} variant="outline" className="tabular-nums">
-                    {k} {level?.percentage?.[k] ?? 0}%
-                  </Badge>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+          ).map(({ label, level }) => {
+            const pct = level?.percentage;
+            const dominantLetters = new Set(
+              (level?.dominantProfile ?? "")
+                .toUpperCase()
+                .split("")
+                .filter((ch): ch is "D" | "I" | "S" | "C" =>
+                  ch === "D" || ch === "I" || ch === "S" || ch === "C",
+                ),
+            );
+            // Fallback: highlight max percentage group(s) when profile is missing
+            if (dominantLetters.size === 0 && pct) {
+              const max = Math.max(pct.D, pct.I, pct.S, pct.C);
+              for (const k of ["D", "I", "S", "C"] as const) {
+                if (pct[k] === max) dominantLetters.add(k);
+              }
+            }
+            const primary =
+              ([...dominantLetters][0] as "D" | "I" | "S" | "C" | undefined) ?? null;
+
+            return (
+              <Card
+                key={label}
+                className={cn(
+                  "overflow-hidden",
+                  primary && "border-l-4",
+                )}
+                style={
+                  primary
+                    ? { borderLeftColor: `var(--disc-${primary.toLowerCase()})` }
+                    : undefined
+                }
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{label}</CardTitle>
+                  <CardDescription className="flex items-center gap-2">
+                    {primary ? <DiscBadge type={primary} /> : null}
+                    <span className="font-semibold text-foreground">
+                      {level?.dominantProfile ?? "—"}
+                    </span>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-1.5">
+                  {(["D", "I", "S", "C"] as const).map((k) => {
+                    const isDominant = dominantLetters.has(k);
+                    const value = pct?.[k] ?? 0;
+                    return (
+                      <Badge
+                        key={k}
+                        variant="outline"
+                        className={cn(
+                          "tabular-nums border transition-colors",
+                          isDominant
+                            ? "border-transparent text-white shadow-sm"
+                            : "text-muted-foreground opacity-70",
+                        )}
+                        style={
+                          isDominant
+                            ? { background: `var(--disc-${k.toLowerCase()})` }
+                            : undefined
+                        }
+                      >
+                        {k} {value}%
+                      </Badge>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Narrative copy still from mock until content API exists */}

@@ -420,7 +420,7 @@ function StaffAnalytics() {
   const statusPie = useMemo(() => {
     const items = [
       { type: "OPEN", label: "Active", value: openCount, color: "var(--primary)" },
-      { type: "CLOSED", label: "Completed", value: closedCount, color: "var(--disc-s)" },
+      { type: "CLOSED", label: "Closed", value: closedCount, color: "var(--disc-s)" },
       { type: "DRAFT", label: "Draft", value: draftCount, color: "var(--muted-foreground)" },
     ];
     return items.filter((d) => d.value > 0);

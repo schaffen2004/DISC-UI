@@ -68,7 +68,7 @@ function AssessmentsLayout() {
 }
 
 function AssessmentsPage() {
-  const { isAuthenticated, isLoading: authLoading, isStaff, role } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, isStaff, role, user } = useAuth();
   const t = useT();
   const queryClient = useQueryClient();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -194,7 +194,6 @@ function AssessmentsPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sessions.map((a) => {
             const canTake =
-              !a.isManager &&
               a.status === "OPEN" &&
               a.myParticipant &&
               a.myParticipant.status !== "SUBMITTED" &&
@@ -480,42 +479,63 @@ function AssessmentsPage() {
                 <InviteParticipantsPanel session={overviewQuery.data} />
               )}
 
-              {canManageStatus(overviewQuery.data) && (
-                <div className="flex flex-wrap justify-end gap-2">
-                  {(overviewQuery.data.status === "DRAFT" ||
-                    overviewQuery.data.status === "CLOSED") && (
-                    <Button
-                      onClick={() => onChangeStatus(overviewQuery.data, "OPEN")}
-                      disabled={statusMutation.isPending}
-                    >
-                      {statusMutation.isPending &&
-                      statusMutation.variables?.nextStatus === "OPEN" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Unlock className="h-4 w-4" />
+              {(() => {
+                const myRow = overviewQuery.data.participants.find((p) => p.user.id === user?.id);
+                const canTakeSelf =
+                  overviewQuery.data.status === "OPEN" &&
+                  Boolean(myRow) &&
+                  myRow!.status !== "SUBMITTED" &&
+                  myRow!.status !== "VERIFIED";
+                const canManage = canManageStatus(overviewQuery.data);
+                if (!canTakeSelf && !canManage) return null;
+                return (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {canTakeSelf && (
+                      <Button asChild>
+                        <Link
+                          to="/assessments/questionnaire"
+                          search={{ sessionId: overviewQuery.data.id }}
+                        >
+                          {t("common.take")}
+                        </Link>
+                      </Button>
+                    )}
+                    {canManage &&
+                      (overviewQuery.data.status === "DRAFT" ||
+                        overviewQuery.data.status === "CLOSED") && (
+                        <Button
+                          onClick={() => onChangeStatus(overviewQuery.data, "OPEN")}
+                          disabled={statusMutation.isPending}
+                        >
+                          {statusMutation.isPending &&
+                          statusMutation.variables?.nextStatus === "OPEN" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Unlock className="h-4 w-4" />
+                          )}
+                          {overviewQuery.data.status === "CLOSED"
+                            ? t("assessments.reopenSession")
+                            : t("assessments.openSession")}
+                        </Button>
                       )}
-                      {overviewQuery.data.status === "CLOSED"
-                        ? t("assessments.reopenSession")
-                        : t("assessments.openSession")}
-                    </Button>
-                  )}
-                  {overviewQuery.data.status === "OPEN" && (
-                    <Button
-                      variant="outline"
-                      onClick={() => onChangeStatus(overviewQuery.data, "CLOSED")}
-                      disabled={statusMutation.isPending}
-                    >
-                      {statusMutation.isPending &&
-                      statusMutation.variables?.nextStatus === "CLOSED" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Lock className="h-4 w-4" />
-                      )}
-                      {t("assessments.closeSession")}
-                    </Button>
-                  )}
-                </div>
-              )}
+                    {canManage && overviewQuery.data.status === "OPEN" && (
+                      <Button
+                        variant="outline"
+                        onClick={() => onChangeStatus(overviewQuery.data, "CLOSED")}
+                        disabled={statusMutation.isPending}
+                      >
+                        {statusMutation.isPending &&
+                        statusMutation.variables?.nextStatus === "CLOSED" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Lock className="h-4 w-4" />
+                        )}
+                        {t("assessments.closeSession")}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
         </DialogContent>
@@ -525,7 +545,7 @@ function AssessmentsPage() {
 }
 
 function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const t = useT();
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
@@ -559,10 +579,13 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
 
   const candidates = useMemo(() => {
     const list = usersQuery.data?.data ?? [];
-    return list.filter((u) => u.id !== user?.id && !existingUserIds.has(u.id));
-  }, [usersQuery.data, user?.id, existingUserIds]);
+    return list.filter((u) => !existingUserIds.has(u.id));
+  }, [usersQuery.data, existingUserIds]);
 
   const selectedIds = Object.keys(selected);
+  const allCandidatesSelected =
+    candidates.length > 0 && candidates.every((u) => Boolean(selected[u.id]));
+  const someCandidatesSelected = candidates.some((u) => Boolean(selected[u.id]));
 
   const inviteMutation = useMutation({
     mutationFn: (participantIds: string[]) => updateSessionParticipants(session.id, participantIds),
@@ -590,6 +613,18 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
       const next = { ...prev };
       if (on) next[userItem.id] = userItem;
       else delete next[userItem.id];
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (on: boolean) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (on) {
+        for (const u of candidates) next[u.id] = u;
+      } else {
+        for (const u of candidates) delete next[u.id];
+      }
       return next;
     });
   };
@@ -637,6 +672,18 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
         <p className="py-2 text-center text-sm text-muted-foreground">
           {t("assessments.noMoreUsers")}
         </p>
+      )}
+
+      {candidates.length > 0 && (
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg border bg-muted/30 px-2.5 py-2">
+          <Checkbox
+            checked={allCandidatesSelected ? true : someCandidatesSelected ? "indeterminate" : false}
+            onCheckedChange={(v) => toggleSelectAll(Boolean(v))}
+          />
+          <span className="text-sm font-medium">
+            {allCandidatesSelected ? t("common.deselectAll") : t("common.selectAll")}
+          </span>
+        </label>
       )}
 
       <div className="max-h-48 space-y-2 overflow-y-auto pr-1">

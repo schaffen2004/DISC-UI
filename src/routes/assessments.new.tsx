@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import { ApiError } from "@/lib/api/client";
 import { createSession, openSession } from "@/lib/api/disc";
 import {
@@ -49,7 +50,8 @@ const steps = [
 ];
 
 function NewAssessment() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -74,14 +76,12 @@ function NewAssessment() {
     enabled: isAuthenticated,
   });
 
-  const users = useMemo(() => {
-    const list = usersQuery.data?.data ?? [];
-    // Owner manages the session; assignees are participants only.
-    return list.filter((u) => u.id !== user?.id);
-  }, [usersQuery.data, user?.id]);
+  const users = useMemo(() => usersQuery.data?.data ?? [], [usersQuery.data]);
 
   const selectedIds = Object.keys(selected);
   const selectedUsers = Object.values(selected);
+  const allUsersSelected = users.length > 0 && users.every((u) => Boolean(selected[u.id]));
+  const someUsersSelected = users.some((u) => Boolean(selected[u.id]));
 
   const canContinueStep1 = title.trim().length > 0;
   const canContinueStep2 = selectedIds.length > 0;
@@ -91,6 +91,18 @@ function NewAssessment() {
       const next = { ...prev };
       if (on) next[userItem.id] = userItem;
       else delete next[userItem.id];
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (on: boolean) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (on) {
+        for (const u of users) next[u.id] = u;
+      } else {
+        for (const u of users) delete next[u.id];
+      }
       return next;
     });
   };
@@ -255,6 +267,18 @@ function NewAssessment() {
 
               {!usersQuery.isLoading && !usersQuery.isError && users.length === 0 && (
                 <p className="py-8 text-center text-sm text-muted-foreground">No users found.</p>
+              )}
+
+              {users.length > 0 && (
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
+                  <Checkbox
+                    checked={allUsersSelected ? true : someUsersSelected ? "indeterminate" : false}
+                    onCheckedChange={(v) => toggleSelectAll(Boolean(v))}
+                  />
+                  <span className="text-sm font-medium">
+                    {allUsersSelected ? t("common.deselectAll") : t("common.selectAll")}
+                  </span>
+                </label>
               )}
 
               <div className="grid gap-2 sm:grid-cols-2 max-h-[420px] overflow-y-auto pr-1">

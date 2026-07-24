@@ -38,6 +38,15 @@ export function listUsers(params: ListUsersParams = {}) {
   return apiFetch<UserListResult>(`/user/all${qs ? `?${qs}` : ""}`);
 }
 
+export type AssignableUserRole = "CUSTOMER" | "OPERATOR";
+
+export function updateUserRole(userId: string, role: AssignableUserRole) {
+  return apiFetch<{ id: string; email: string; role: string }>(`/user/${userId}/role`, {
+    method: "PUT",
+    body: { role },
+  });
+}
+
 /** UserStatus enum from API: NEW=0, ACTIVE=1, LOCK=2 */
 export function userStatusLabel(status: number | string | null | undefined) {
   const n = typeof status === "string" ? Number(status) : status;

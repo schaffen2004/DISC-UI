@@ -23,12 +23,11 @@ import {
   downloadResultPdf,
   getMyHistory,
   getSessionOverview,
-  participantStatusLabel,
   primaryDiscType,
-  sessionStatusLabel,
   type DiscParticipantStatus,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
+import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reports/$id")({
@@ -89,6 +88,7 @@ function SessionReportPage() {
 function MySessionReport() {
   const { id: sessionId } = Route.useParams();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const t = useT();
 
   const historyQuery = useQuery({
     queryKey: ["disc", "history", "me"],
@@ -159,7 +159,9 @@ function MySessionReport() {
             <Card>
               <CardHeader>
                 <CardTitle>Your participation</CardTitle>
-                <CardDescription>Status {participantStatusLabel[mine.status]}</CardDescription>
+                <CardDescription>
+                  {t("employees.colStatus")} {t(participantStatusMessageKey(mine.status))}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -170,7 +172,7 @@ function MySessionReport() {
                         variant="outline"
                         className={cn("font-medium", participantStatusStyle[mine.status])}
                       >
-                        {participantStatusLabel[mine.status]}
+                        {t(participantStatusMessageKey(mine.status))}
                       </Badge>
                     </div>
                   </div>
@@ -232,6 +234,7 @@ function MySessionReport() {
 function StaffSessionReport() {
   const { id: sessionId } = Route.useParams();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const t = useT();
   const [q, setQ] = useState("");
   const [pdfError, setPdfError] = useState<string | null>(null);
 
@@ -299,7 +302,7 @@ function StaffSessionReport() {
                     variant="outline"
                     className={cn("font-medium", sessionStatusStyle[overview.status])}
                   >
-                    {sessionStatusLabel[overview.status]}
+                    {t(sessionStatusMessageKey(overview.status))}
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -404,7 +407,7 @@ function StaffSessionReport() {
                                 variant="outline"
                                 className={cn("font-medium", participantStatusStyle[p.status])}
                               >
-                                {participantStatusLabel[p.status]}
+                                {t(participantStatusMessageKey(p.status))}
                               </Badge>
                             </TableCell>
                             <TableCell>

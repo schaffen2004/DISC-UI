@@ -15,3 +15,17 @@ export function participantStatusMessageKey(
 ): MessageKey {
   return `participant.status.${status}` as MessageKey;
 }
+
+export function discLevelMessageKey(level: number): MessageKey {
+  const key = `disc.level.${level}` as MessageKey;
+  return key;
+}
+
+export function userStatusMessageKey(
+  label: "New" | "Active" | "Locked" | string,
+): MessageKey {
+  if (label === "New" || label === "Active" || label === "Locked") {
+    return `user.status.${label}` as MessageKey;
+  }
+  return "user.status.New";
+}

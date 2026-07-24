@@ -21,12 +21,11 @@ import { useAuth } from "@/lib/auth";
 import {
   getMyHistory,
   listSessions,
-  participantStatusLabel,
   primaryDiscType,
-  sessionStatusLabel,
   type DiscParticipantStatus,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
+import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reports")({
@@ -105,6 +104,7 @@ function ReportsPage() {
 
 function StaffReportsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const t = useT();
   const [q, setQ] = useState("");
 
   const sessionsQuery = useQuery({
@@ -218,7 +218,7 @@ function StaffReportsPage() {
                             variant="outline"
                             className={cn("font-medium", sessionStatusStyle[s.status])}
                           >
-                            {sessionStatusLabel[s.status]}
+                            {t(sessionStatusMessageKey(s.status))}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -255,6 +255,7 @@ function StaffReportsPage() {
 
 function MyReportsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const t = useT();
   const [q, setQ] = useState("");
 
   const historyQuery = useQuery({
@@ -367,7 +368,7 @@ function MyReportsPage() {
                               variant="outline"
                               className={cn("font-medium", participantStatusStyle[h.status])}
                             >
-                              {participantStatusLabel[h.status]}
+                              {t(participantStatusMessageKey(h.status))}
                             </Badge>
                           </TableCell>
                           <TableCell>
