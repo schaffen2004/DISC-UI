@@ -177,13 +177,12 @@ function AssessmentsPage() {
               a.myParticipant &&
               a.myParticipant.status !== "SUBMITTED" &&
               a.myParticipant.status !== "VERIFIED";
+            // Only show Result when the invitee has a scored status (list API has no result field).
+            // INVITED / IN_PROGRESS — even on CLOSED sessions — means no result yet.
             const canViewResult =
               a.myParticipant &&
               (a.myParticipant.status === "SUBMITTED" ||
-                a.myParticipant.status === "VERIFIED" ||
-                (a.status === "CLOSED" &&
-                  (a.myParticipant.status === "INVITED" ||
-                    a.myParticipant.status === "IN_PROGRESS")));
+                a.myParticipant.status === "VERIFIED");
 
             const isUpdating =
               statusMutation.isPending && statusMutation.variables?.sessionId === a.id;

@@ -987,8 +987,7 @@ function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
             Continue
           </Link>
         </Button>
-      ) : session.myParticipant?.id &&
-        (isDoneParticipant(status) || session.status === "CLOSED") ? (
+      ) : session.myParticipant?.id && isDoneParticipant(status) ? (
         <Button variant="ghost" size="sm" asChild>
           <Link to="/assessments/result" search={{ participantId: session.myParticipant.id }}>
             Result
