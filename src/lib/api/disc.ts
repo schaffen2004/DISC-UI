@@ -157,6 +157,14 @@ export function closeSession(sessionId: string) {
   });
 }
 
+/** DRAFT: replace full list. OPEN: append new invitees only. */
+export function updateSessionParticipants(sessionId: string, participantIds: string[]) {
+  return apiFetch(`/disc/sessions/${sessionId}/participants`, {
+    method: "PATCH",
+    body: { participantIds },
+  });
+}
+
 export function getMyHistory() {
   return apiFetch<DiscHistoryItem[]>("/disc/history/me");
 }

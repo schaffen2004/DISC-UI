@@ -1,13 +1,24 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { Eye, Loader2, MoreHorizontal, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Eye,
+  Loader2,
+  Lock,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Unlock,
+  UserPlus,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api/client";
 import {
   closeSession,
   filterSessionsForRole,
@@ -30,9 +42,17 @@ import {
   openSession,
   participantStatusLabel,
   sessionStatusLabel,
-  type DiscSessionListItem,
+  updateSessionParticipants,
+  type DiscSessionOverview,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
+import {
+  listUsers,
+  userDisplayName,
+  userInitials,
+  type UserListItem,
+} from "@/lib/api/users";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assessments")({
   head: () => ({
@@ -108,10 +128,24 @@ function AssessmentsPage() {
     },
   });
 
+  /** ADMIN / OPERATOR who own the session can open (incl. reopen) or close. */
+  const canManageStatus = (session: { isManager?: boolean }) =>
+    Boolean(isStaff && session.isManager);
+
   const openDetails = (sessionId: string) => setSelectedSessionId(sessionId);
-  const onChangeStatus = (session: DiscSessionListItem, nextStatus: "OPEN" | "CLOSED") => {
+  const onChangeStatus = (
+    session: { id: string },
+    nextStatus: "OPEN" | "CLOSED",
+  ) => {
     statusMutation.mutate({ sessionId: session.id, nextStatus });
   };
+
+  const statusError =
+    statusMutation.error instanceof ApiError || statusMutation.error instanceof Error
+      ? statusMutation.error.message
+      : statusMutation.isError
+        ? "Failed to update session status"
+        : null;
 
   return (
     <div className="space-y-6">
@@ -162,6 +196,12 @@ function AssessmentsPage() {
         </Card>
       )}
 
+      {statusError && (
+        <Card className="border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          {statusError}
+        </Card>
+      )}
+
       {isAuthenticated && !isLoading && !isError && sessions.length === 0 && (
         <Card className="p-10 text-center text-sm text-muted-foreground">
           No assessment sessions yet. Create one to get started.
@@ -183,6 +223,9 @@ function AssessmentsPage() {
               a.myParticipant &&
               (a.myParticipant.status === "SUBMITTED" ||
                 a.myParticipant.status === "VERIFIED");
+            const manage = canManageStatus(a);
+            const canOpen = manage && (a.status === "DRAFT" || a.status === "CLOSED");
+            const canClose = manage && a.status === "OPEN";
 
             const isUpdating =
               statusMutation.isPending && statusMutation.variables?.sessionId === a.id;
@@ -229,8 +272,8 @@ function AssessmentsPage() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      {a.isManager && (
+                    <div className="flex flex-wrap items-center justify-end gap-1">
+                      {manage && (
                         <Button variant="outline" size="sm" onClick={() => openDetails(a.id)}>
                           <Eye className="h-4 w-4" />
                           Details
@@ -253,7 +296,36 @@ function AssessmentsPage() {
                           </Link>
                         </Button>
                       )}
-                      {a.isManager && (
+                      {canOpen && (
+                        <Button
+                          size="sm"
+                          onClick={() => onChangeStatus(a, "OPEN")}
+                          disabled={isUpdating}
+                        >
+                          {isUpdating && statusMutation.variables?.nextStatus === "OPEN" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Unlock className="h-4 w-4" />
+                          )}
+                          {a.status === "CLOSED" ? "Reopen" : "Open"}
+                        </Button>
+                      )}
+                      {canClose && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onChangeStatus(a, "CLOSED")}
+                          disabled={isUpdating}
+                        >
+                          {isUpdating && statusMutation.variables?.nextStatus === "CLOSED" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Lock className="h-4 w-4" />
+                          )}
+                          Close
+                        </Button>
+                      )}
+                      {manage && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -273,12 +345,12 @@ function AssessmentsPage() {
                             <DropdownMenuItem onClick={() => openDetails(a.id)}>
                               View details
                             </DropdownMenuItem>
-                            {a.status === "DRAFT" && (
+                            {canOpen && (
                               <DropdownMenuItem onClick={() => onChangeStatus(a, "OPEN")}>
-                                Open session
+                                {a.status === "CLOSED" ? "Reopen session" : "Open session"}
                               </DropdownMenuItem>
                             )}
-                            {a.status === "OPEN" && (
+                            {canClose && (
                               <DropdownMenuItem onClick={() => onChangeStatus(a, "CLOSED")}>
                                 Close session
                               </DropdownMenuItem>
@@ -299,7 +371,7 @@ function AssessmentsPage() {
         open={Boolean(selectedSessionId)}
         onOpenChange={(open) => !open && setSelectedSessionId(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{selectedSession?.title ?? "Session details"}</DialogTitle>
             <DialogDescription>Basic information and current session state.</DialogDescription>
@@ -347,8 +419,8 @@ function AssessmentsPage() {
 
               <div className="rounded-lg border p-3">
                 <div className="mb-2 text-sm font-medium">Participants status</div>
-                <div className="space-y-2 text-sm">
-                  {overviewQuery.data.participants.slice(0, 5).map((participant) => (
+                <div className="max-h-40 space-y-2 overflow-y-auto text-sm">
+                  {overviewQuery.data.participants.map((participant) => (
                     <div key={participant.id} className="flex items-center justify-between gap-3">
                       <span className="truncate text-muted-foreground">
                         {participant.user.email}
@@ -362,17 +434,27 @@ function AssessmentsPage() {
                 </div>
               </div>
 
-              {overviewQuery.data.isManager && (
-                <div className="flex justify-end gap-2">
-                  {overviewQuery.data.status === "DRAFT" && (
+              {canManageStatus(overviewQuery.data) && overviewQuery.data.status === "OPEN" && (
+                <InviteParticipantsPanel session={overviewQuery.data} />
+              )}
+
+              {canManageStatus(overviewQuery.data) && (
+                <div className="flex flex-wrap justify-end gap-2">
+                  {(overviewQuery.data.status === "DRAFT" ||
+                    overviewQuery.data.status === "CLOSED") && (
                     <Button
                       onClick={() => onChangeStatus(overviewQuery.data, "OPEN")}
                       disabled={statusMutation.isPending}
                     >
-                      {statusMutation.isPending ? (
+                      {statusMutation.isPending &&
+                      statusMutation.variables?.nextStatus === "OPEN" ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : null}
-                      Open session
+                      ) : (
+                        <Unlock className="h-4 w-4" />
+                      )}
+                      {overviewQuery.data.status === "CLOSED"
+                        ? "Reopen session"
+                        : "Open session"}
                     </Button>
                   )}
                   {overviewQuery.data.status === "OPEN" && (
@@ -381,9 +463,12 @@ function AssessmentsPage() {
                       onClick={() => onChangeStatus(overviewQuery.data, "CLOSED")}
                       disabled={statusMutation.isPending}
                     >
-                      {statusMutation.isPending ? (
+                      {statusMutation.isPending &&
+                      statusMutation.variables?.nextStatus === "CLOSED" ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : null}
+                      ) : (
+                        <Lock className="h-4 w-4" />
+                      )}
                       Close session
                     </Button>
                   )}
@@ -393,6 +478,175 @@ function AssessmentsPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) {
+  const { isAuthenticated, user } = useAuth();
+  const queryClient = useQueryClient();
+  const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Record<string, UserListItem>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearch(q), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  // Reset selection when switching sessions
+  useEffect(() => {
+    setSelected({});
+    setQ("");
+    setSearch("");
+    setFormError(null);
+  }, [session.id]);
+
+  const existingUserIds = useMemo(
+    () => new Set(session.participants.map((p) => p.user.id)),
+    [session.participants],
+  );
+
+  const usersQuery = useQuery({
+    queryKey: ["users", "all", "invite", session.id, { search }],
+    queryFn: () => listUsers({ search, page: 1, limit: 100 }),
+    enabled: isAuthenticated,
+  });
+
+  const candidates = useMemo(() => {
+    const list = usersQuery.data?.data ?? [];
+    return list.filter(
+      (u) => u.id !== user?.id && !existingUserIds.has(u.id),
+    );
+  }, [usersQuery.data, user?.id, existingUserIds]);
+
+  const selectedIds = Object.keys(selected);
+
+  const inviteMutation = useMutation({
+    mutationFn: (participantIds: string[]) =>
+      updateSessionParticipants(session.id, participantIds),
+    onSuccess: async () => {
+      setSelected({});
+      setFormError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["disc", "sessions"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["disc", "session", session.id, "overview"],
+        }),
+      ]);
+    },
+    onError: (err) => {
+      setFormError(
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : "Failed to invite participants",
+      );
+    },
+  });
+
+  const toggleUser = (userItem: UserListItem, on: boolean) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (on) next[userItem.id] = userItem;
+      else delete next[userItem.id];
+      return next;
+    });
+  };
+
+  const onInvite = () => {
+    setFormError(null);
+    if (selectedIds.length === 0) {
+      setFormError("Select at least one person to invite.");
+      return;
+    }
+    inviteMutation.mutate(selectedIds);
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex items-center gap-2">
+        <UserPlus className="h-4 w-4 text-primary" />
+        <div className="text-sm font-medium">Invite participants</div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Session is open — add more invitees without removing existing participants.
+      </p>
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="pl-8"
+          placeholder="Search users by name, email…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </div>
+
+      {usersQuery.isLoading && (
+        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading users…
+        </div>
+      )}
+
+      {usersQuery.isError && (
+        <p className="text-sm text-destructive">
+          {(usersQuery.error as Error)?.message || "Failed to load users"}
+        </p>
+      )}
+
+      {!usersQuery.isLoading && !usersQuery.isError && candidates.length === 0 && (
+        <p className="py-2 text-center text-sm text-muted-foreground">
+          No more users to invite.
+        </p>
+      )}
+
+      <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+        {candidates.map((u) => {
+          const isOn = Boolean(selected[u.id]);
+          return (
+            <label
+              key={u.id}
+              className={cn(
+                "flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 transition-colors",
+                isOn ? "border-primary bg-primary/5" : "hover:bg-muted/40",
+              )}
+            >
+              <Checkbox
+                checked={isOn}
+                onCheckedChange={(v) => toggleUser(u, Boolean(v))}
+              />
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                  {userInitials(u)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{userDisplayName(u)}</div>
+                <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
+      {formError && <p className="text-sm text-destructive">{formError}</p>}
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+        <Button
+          size="sm"
+          onClick={onInvite}
+          disabled={inviteMutation.isPending || selectedIds.length === 0}
+        >
+          {inviteMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <UserPlus className="h-4 w-4" />
+          )}
+          Invite
+        </Button>
+      </div>
     </div>
   );
 }
