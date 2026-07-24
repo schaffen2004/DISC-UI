@@ -1,15 +1,13 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { Eye, Loader2, Lock, MoreHorizontal, Plus, Search, Unlock, UserPlus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Eye, Loader2, Lock, MoreHorizontal, Plus, Unlock } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -31,13 +29,9 @@ import {
   getSessionOverview,
   listSessions,
   openSession,
-  updateSessionParticipants,
-  type DiscSessionOverview,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
-import { listUsers, userDisplayName, userInitials, type UserListItem } from "@/lib/api/users";
 import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assessments")({
   head: () => ({
@@ -193,11 +187,12 @@ function AssessmentsPage() {
       {isAuthenticated && !isLoading && !isError && sessions.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sessions.map((a) => {
+            // OPEN sessions are open enrollment — Take even before myParticipant exists (API auto-joins).
             const canTake =
               a.status === "OPEN" &&
-              a.myParticipant &&
-              a.myParticipant.status !== "SUBMITTED" &&
-              a.myParticipant.status !== "VERIFIED";
+              (!a.myParticipant ||
+                (a.myParticipant.status !== "SUBMITTED" &&
+                  a.myParticipant.status !== "VERIFIED"));
             // Only show Result when the invitee has a scored status (list API has no result field).
             // INVITED / IN_PROGRESS — even on CLOSED sessions — means no result yet.
             const canViewResult =
@@ -244,19 +239,25 @@ function AssessmentsPage() {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex -space-x-2">
-                      {Array.from({ length: Math.min(4, Math.max(1, a.participantCount)) }).map(
-                        (_, i) => (
-                          <Avatar key={i} className="h-7 w-7 border-2 border-background">
-                            <AvatarFallback className="bg-muted text-[10px]">
-                              {String.fromCharCode(65 + i)}
-                            </AvatarFallback>
-                          </Avatar>
-                        ),
-                      )}
-                      {a.participantCount > 4 && (
-                        <div className="grid h-7 w-7 place-items-center rounded-full border-2 border-background bg-muted text-[10px] font-medium text-muted-foreground">
-                          +{a.participantCount - 4}
+                      {a.participantCount === 0 ? (
+                        <div className="grid h-7 place-items-center rounded-full border border-dashed px-2 text-[10px] text-muted-foreground">
+                          Open to all
                         </div>
+                      ) : (
+                        <>
+                          {Array.from({ length: Math.min(4, a.participantCount) }).map((_, i) => (
+                            <Avatar key={i} className="h-7 w-7 border-2 border-background">
+                              <AvatarFallback className="bg-muted text-[10px]">
+                                {String.fromCharCode(65 + i)}
+                              </AvatarFallback>
+                            </Avatar>
+                          ))}
+                          {a.participantCount > 4 && (
+                            <div className="grid h-7 w-7 place-items-center rounded-full border-2 border-background bg-muted text-[10px] font-medium text-muted-foreground">
+                              +{a.participantCount - 4}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-1">
@@ -475,17 +476,13 @@ function AssessmentsPage() {
                   )}
                 </div>
               </div>
-              {canManageStatus(overviewQuery.data) && overviewQuery.data.status === "OPEN" && (
-                <InviteParticipantsPanel session={overviewQuery.data} />
-              )}
 
               {(() => {
                 const myRow = overviewQuery.data.participants.find((p) => p.user.id === user?.id);
                 const canTakeSelf =
                   overviewQuery.data.status === "OPEN" &&
-                  Boolean(myRow) &&
-                  myRow!.status !== "SUBMITTED" &&
-                  myRow!.status !== "VERIFIED";
+                  (!myRow ||
+                    (myRow.status !== "SUBMITTED" && myRow.status !== "VERIFIED"));
                 const canManage = canManageStatus(overviewQuery.data);
                 if (!canTakeSelf && !canManage) return null;
                 return (
@@ -540,197 +537,6 @@ function AssessmentsPage() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) {
-  const { isAuthenticated } = useAuth();
-  const t = useT();
-  const queryClient = useQueryClient();
-  const [q, setQ] = useState("");
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Record<string, UserListItem>>({});
-  const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(q), 300);
-    return () => window.clearTimeout(timer);
-  }, [q]);
-
-  // Reset selection when switching sessions
-  useEffect(() => {
-    setSelected({});
-    setQ("");
-    setSearch("");
-    setFormError(null);
-  }, [session.id]);
-
-  const existingUserIds = useMemo(
-    () => new Set(session.participants.map((p) => p.user.id)),
-    [session.participants],
-  );
-
-  const usersQuery = useQuery({
-    queryKey: ["users", "all", "invite", session.id, { search }],
-    queryFn: () => listUsers({ search, page: 1, limit: 100 }),
-    enabled: isAuthenticated,
-  });
-
-  const candidates = useMemo(() => {
-    const list = usersQuery.data?.data ?? [];
-    return list.filter((u) => !existingUserIds.has(u.id));
-  }, [usersQuery.data, existingUserIds]);
-
-  const selectedIds = Object.keys(selected);
-  const allCandidatesSelected =
-    candidates.length > 0 && candidates.every((u) => Boolean(selected[u.id]));
-  const someCandidatesSelected = candidates.some((u) => Boolean(selected[u.id]));
-
-  const inviteMutation = useMutation({
-    mutationFn: (participantIds: string[]) => updateSessionParticipants(session.id, participantIds),
-    onSuccess: async () => {
-      setSelected({});
-      setFormError(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["disc", "sessions"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["disc", "session", session.id, "overview"],
-        }),
-      ]);
-    },
-    onError: (err) => {
-      setFormError(
-        err instanceof ApiError || err instanceof Error
-          ? err.message
-          : "Failed to invite participants",
-      );
-    },
-  });
-
-  const toggleUser = (userItem: UserListItem, on: boolean) => {
-    setSelected((prev) => {
-      const next = { ...prev };
-      if (on) next[userItem.id] = userItem;
-      else delete next[userItem.id];
-      return next;
-    });
-  };
-
-  const toggleSelectAll = (on: boolean) => {
-    setSelected((prev) => {
-      const next = { ...prev };
-      if (on) {
-        for (const u of candidates) next[u.id] = u;
-      } else {
-        for (const u of candidates) delete next[u.id];
-      }
-      return next;
-    });
-  };
-
-  const onInvite = () => {
-    setFormError(null);
-    if (selectedIds.length === 0) {
-      setFormError("Select at least one person to invite.");
-      return;
-    }
-    inviteMutation.mutate(selectedIds);
-  };
-
-  return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <div className="flex items-center gap-2">
-        <UserPlus className="h-4 w-4 text-primary" />
-        <div className="text-sm font-medium">{t("assessments.inviteTitle")}</div>
-      </div>
-      <p className="text-xs text-muted-foreground">{t("assessments.inviteHint")}</p>
-
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="pl-8"
-          placeholder={t("assessments.searchUsers")}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      </div>
-
-      {usersQuery.isLoading && (
-        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
-        </div>
-      )}
-
-      {usersQuery.isError && (
-        <p className="text-sm text-destructive">
-          {(usersQuery.error as Error)?.message || "Failed to load users"}
-        </p>
-      )}
-
-      {!usersQuery.isLoading && !usersQuery.isError && candidates.length === 0 && (
-        <p className="py-2 text-center text-sm text-muted-foreground">
-          {t("assessments.noMoreUsers")}
-        </p>
-      )}
-
-      {candidates.length > 0 && (
-        <label className="flex cursor-pointer items-center gap-3 rounded-lg border bg-muted/30 px-2.5 py-2">
-          <Checkbox
-            checked={allCandidatesSelected ? true : someCandidatesSelected ? "indeterminate" : false}
-            onCheckedChange={(v) => toggleSelectAll(Boolean(v))}
-          />
-          <span className="text-sm font-medium">
-            {allCandidatesSelected ? t("common.deselectAll") : t("common.selectAll")}
-          </span>
-        </label>
-      )}
-
-      <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
-        {candidates.map((u) => {
-          const isOn = Boolean(selected[u.id]);
-          return (
-            <label
-              key={u.id}
-              className={cn(
-                "flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 transition-colors",
-                isOn ? "border-primary bg-primary/5" : "hover:bg-muted/40",
-              )}
-            >
-              <Checkbox checked={isOn} onCheckedChange={(v) => toggleUser(u, Boolean(v))} />
-              <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                  {userInitials(u)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{userDisplayName(u)}</div>
-                <div className="truncate text-xs text-muted-foreground">{u.email}</div>
-              </div>
-            </label>
-          );
-        })}
-      </div>
-
-      {formError && <p className="text-sm text-destructive">{formError}</p>}
-
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          {t("assessments.selected", { count: selectedIds.length })}
-        </span>
-        <Button
-          size="sm"
-          onClick={onInvite}
-          disabled={inviteMutation.isPending || selectedIds.length === 0}
-        >
-          {inviteMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <UserPlus className="h-4 w-4" />
-          )}
-          {t("common.invite")}
-        </Button>
-      </div>
     </div>
   );
 }

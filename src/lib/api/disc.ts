@@ -117,7 +117,8 @@ export const discLevelLabel: Record<number, string> = {
 export type CreateDiscSessionPayload = {
   title: string;
   description?: string;
-  participantIds: string[];
+  /** Optional — OPEN sessions allow any member to self-enroll. */
+  participantIds?: string[];
 };
 
 export type CreateDiscSessionResult = {
@@ -129,11 +130,16 @@ export function listSessions() {
   return apiFetch<DiscSessionListItem[]>("/disc/sessions");
 }
 
-/** OPERATOR only sees sessions they created or were invited to. ADMIN sees all. */
+/**
+ * OPERATOR sees sessions they manage, are in, or that are OPEN (open enrollment).
+ * ADMIN / others keep the full API list.
+ */
 export function filterSessionsForRole(sessions: DiscSessionListItem[], role?: string | null) {
   const r = (role ?? "").trim().toUpperCase();
   if (r === "OPERATOR") {
-    return sessions.filter((s) => s.isManager || Boolean(s.myParticipant));
+    return sessions.filter(
+      (s) => s.isManager || Boolean(s.myParticipant) || s.status === "OPEN",
+    );
   }
   return sessions;
 }

@@ -225,10 +225,19 @@ function EmployeeDashboard({
   const firstName = displayName.split(/\s+/)[0] || "there";
 
   const mySessions = useMemo(
-    () => sessions.filter((s) => Boolean(s.myParticipant)),
+    () =>
+      sessions.filter(
+        (s) =>
+          Boolean(s.myParticipant) ||
+          (s.status === "OPEN" && !isDoneParticipant(s.myParticipant?.status)),
+      ),
     [sessions],
   );
-  const pending = mySessions.filter((s) => isPendingParticipant(s.myParticipant?.status));
+  const pending = mySessions.filter(
+    (s) =>
+      (s.status === "OPEN" && !s.myParticipant) ||
+      isPendingParticipant(s.myParticipant?.status),
+  );
   const completed = mySessions.filter((s) => isDoneParticipant(s.myParticipant?.status));
   const withResult = history.filter((h) => h.result);
   const latestReports = withResult.slice(0, 5);
@@ -239,7 +248,7 @@ function EmployeeDashboard({
     const counts = { pending: 0, done: 0, other: 0 };
     for (const s of mySessions) {
       const st = s.myParticipant?.status;
-      if (isPendingParticipant(st)) counts.pending += 1;
+      if ((s.status === "OPEN" && !st) || isPendingParticipant(st)) counts.pending += 1;
       else if (isDoneParticipant(st)) counts.done += 1;
       else counts.other += 1;
     }
@@ -301,8 +310,10 @@ function EmployeeDashboard({
                   {activePending.title}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {t(participantStatusMessageKey(activePending.myParticipant!.status))} ·{" "}
-                  {t(sessionStatusMessageKey(activePending.status))}
+                  {activePending.myParticipant
+                    ? t(participantStatusMessageKey(activePending.myParticipant.status))
+                    : t("assessments.availableToTake")}{" "}
+                  · {t(sessionStatusMessageKey(activePending.status))}
                   {pending.length > 1 ? ` · +${pending.length - 1} more` : ""}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -312,7 +323,9 @@ function EmployeeDashboard({
                       search={{ sessionId: activePending.id }}
                     >
                       <PlayCircle className="h-4 w-4" />
-                      Continue assessment
+                      {activePending.myParticipant
+                        ? "Continue assessment"
+                        : "Take assessment"}
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -968,7 +981,9 @@ function StaffDashboard({
 function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
   const t = useT();
   const status = session.myParticipant?.status;
-  const pending = isPendingParticipant(status);
+  const canTake =
+    session.status === "OPEN" &&
+    (!status || isPendingParticipant(status));
   return (
     <div className="flex items-center gap-3 rounded-lg border p-3">
       <Avatar className="h-8 w-8">
@@ -979,14 +994,14 @@ function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{session.title}</div>
         <div className="text-xs text-muted-foreground">
-          {status ? t(participantStatusMessageKey(status)) : "—"} ·{" "}
+          {status ? t(participantStatusMessageKey(status)) : t(sessionStatusMessageKey(session.status))} ·{" "}
           {new Date(session.createdAt).toLocaleDateString()}
         </div>
       </div>
-      {pending && session.status !== "CLOSED" ? (
+      {canTake ? (
         <Button variant="outline" size="sm" asChild>
           <Link to="/assessments/questionnaire" search={{ sessionId: session.id }}>
-            Continue
+            {status ? "Continue" : "Take"}
           </Link>
         </Button>
       ) : session.myParticipant?.id && isDoneParticipant(status) ? (

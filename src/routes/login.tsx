@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { useT } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 const searchSchema = z.object({
   registered: z.string().email().optional().catch(undefined),
@@ -45,13 +46,13 @@ function LoginPage() {
       await login(username.trim(), password);
       navigate({ to: "/" });
     } catch (err) {
-      const message =
+      const raw =
         err instanceof ApiError
           ? err.message
           : err instanceof Error
             ? err.message
             : t("auth.loginFailed");
-      setError(message);
+      setError(formatLoginError(raw, t));
     } finally {
       setSubmitting(false);
     }
@@ -181,4 +182,22 @@ function LoginPage() {
       </div>
     </div>
   );
+}
+
+function formatLoginError(message: string, t: (key: MessageKey) => string) {
+  switch (message) {
+    case "ACCOUNT_DOES_NOT_EXIST":
+      return t("auth.accountNotFound");
+    case "WRONG_PASSWORD":
+      return t("auth.wrongPassword");
+    case "USER_IS_NOT_ACTIVE":
+      return t("auth.userNotActive");
+    case "USER_IS_LOCK":
+    case "USER_LOCKED":
+      return t("auth.userLocked");
+    case "USER_IS_DELETE":
+      return t("auth.userDeleted");
+    default:
+      return message || t("auth.loginFailed");
+  }
 }
