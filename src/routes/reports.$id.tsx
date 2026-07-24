@@ -422,6 +422,19 @@ function StaffSessionReport() {
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-2">
+                                {p.status === "SUBMITTED" && (
+                                  <Button asChild size="sm">
+                                    <Link
+                                      to="/assessments/verify"
+                                      search={{
+                                        sessionId,
+                                        participantId: p.id,
+                                      }}
+                                    >
+                                      Verify
+                                    </Link>
+                                  </Button>
+                                )}
                                 {p.result ? (
                                   <>
                                     <Button asChild variant="outline" size="sm">
@@ -455,11 +468,11 @@ function StaffSessionReport() {
                                       PDF
                                     </Button>
                                   </>
-                                ) : (
+                                ) : p.status !== "SUBMITTED" ? (
                                   <span className="text-xs text-muted-foreground">
                                     No result yet
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                             </TableCell>
                           </TableRow>

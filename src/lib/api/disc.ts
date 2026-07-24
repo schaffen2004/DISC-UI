@@ -212,6 +212,52 @@ export function getAssessment(sessionId: string) {
   return apiFetch<DiscAssessment>(`/disc/sessions/${sessionId}/assessment`);
 }
 
+export type DiscAnswerItem = {
+  questionId: string;
+  optionId: string;
+};
+
+export type SaveDiscAnswersPayload = {
+  answers: DiscAnswerItem[];
+};
+
+export type DiscVerification = {
+  participantId: string;
+  questions: DiscQuestion[];
+  answers: DiscAnswerItem[];
+};
+
+export function saveAssessmentDraft(sessionId: string, payload: SaveDiscAnswersPayload) {
+  return apiFetch(`/disc/sessions/${sessionId}/assessment/draft`, {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export function submitAssessment(sessionId: string, payload: SaveDiscAnswersPayload) {
+  return apiFetch(`/disc/sessions/${sessionId}/assessment/submit`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function getVerification(sessionId: string, participantId: string) {
+  return apiFetch<DiscVerification>(
+    `/disc/sessions/${sessionId}/participants/${participantId}/verification`,
+  );
+}
+
+export function submitVerification(
+  sessionId: string,
+  participantId: string,
+  payload: SaveDiscAnswersPayload,
+) {
+  return apiFetch(`/disc/sessions/${sessionId}/participants/${participantId}/verification/submit`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function getResult(participantId: string) {
   return apiFetch<DiscHistoryItem>(`/disc/results/${participantId}`);
 }

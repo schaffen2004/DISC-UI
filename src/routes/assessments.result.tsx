@@ -321,12 +321,15 @@ function ResultPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {(
             [
-              ["Adaptive", result.adaptive],
-              ["Natural", result.natural],
-              ["Pressure", result.pressure],
-              ["Motivator / Fear", result.motivatorFear],
+              { label: "Adaptive", level: result.adaptive },
+              { label: "Natural", level: result.natural },
+              { label: "Pressure", level: result.pressure },
+              { label: "Motivator / Fear", level: result.motivatorFear },
+              ...(result.managerValidation
+                ? [{ label: "Manager validation", level: result.managerValidation }]
+                : []),
             ] as const
-          ).map(([label, level]) => (
+          ).map(({ label, level }) => (
             <Card key={label}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">{label}</CardTitle>

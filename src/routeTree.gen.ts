@@ -19,6 +19,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as AssessmentsNewRouteImport } from './routes/assessments.new'
 import { Route as AssessmentsQuestionnaireRouteImport } from './routes/assessments.questionnaire'
 import { Route as AssessmentsResultRouteImport } from './routes/assessments.result'
+import { Route as AssessmentsVerifyRouteImport } from './routes/assessments.verify'
 import { Route as ReportsIdRouteImport } from './routes/reports.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -72,6 +73,11 @@ const AssessmentsResultRoute = AssessmentsResultRouteImport.update({
   path: '/result',
   getParentRoute: () => AssessmentsRoute,
 } as any)
+const AssessmentsVerifyRoute = AssessmentsVerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => AssessmentsRoute,
+} as any)
 const ReportsIdRoute = ReportsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/assessments/new': typeof AssessmentsNewRoute
   '/assessments/questionnaire': typeof AssessmentsQuestionnaireRoute
   '/assessments/result': typeof AssessmentsResultRoute
+  '/assessments/verify': typeof AssessmentsVerifyRoute
   '/reports/$id': typeof ReportsIdRoute
 }
 export interface FileRoutesByTo {
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/assessments/new': typeof AssessmentsNewRoute
   '/assessments/questionnaire': typeof AssessmentsQuestionnaireRoute
   '/assessments/result': typeof AssessmentsResultRoute
+  '/assessments/verify': typeof AssessmentsVerifyRoute
   '/reports/$id': typeof ReportsIdRoute
 }
 export interface FileRoutesById {
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/assessments/new': typeof AssessmentsNewRoute
   '/assessments/questionnaire': typeof AssessmentsQuestionnaireRoute
   '/assessments/result': typeof AssessmentsResultRoute
+  '/assessments/verify': typeof AssessmentsVerifyRoute
   '/reports/$id': typeof ReportsIdRoute
 }
 export interface FileRouteTypes {
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
     | '/assessments/new'
     | '/assessments/questionnaire'
     | '/assessments/result'
+    | '/assessments/verify'
     | '/reports/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/assessments/new'
     | '/assessments/questionnaire'
     | '/assessments/result'
+    | '/assessments/verify'
     | '/reports/$id'
   id:
     | '__root__'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/assessments/new'
     | '/assessments/questionnaire'
     | '/assessments/result'
+    | '/assessments/verify'
     | '/reports/$id'
   fileRoutesById: FileRoutesById
 }
@@ -242,6 +254,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssessmentsResultRouteImport
       parentRoute: typeof AssessmentsRoute
     }
+    '/assessments/verify': {
+      id: '/assessments/verify'
+      path: '/verify'
+      fullPath: '/assessments/verify'
+      preLoaderRoute: typeof AssessmentsVerifyRouteImport
+      parentRoute: typeof AssessmentsRoute
+    }
     '/reports/$id': {
       id: '/reports/$id'
       path: '/$id'
@@ -256,12 +275,14 @@ interface AssessmentsRouteChildren {
   AssessmentsNewRoute: typeof AssessmentsNewRoute
   AssessmentsQuestionnaireRoute: typeof AssessmentsQuestionnaireRoute
   AssessmentsResultRoute: typeof AssessmentsResultRoute
+  AssessmentsVerifyRoute: typeof AssessmentsVerifyRoute
 }
 
 const AssessmentsRouteChildren: AssessmentsRouteChildren = {
   AssessmentsNewRoute: AssessmentsNewRoute,
   AssessmentsQuestionnaireRoute: AssessmentsQuestionnaireRoute,
   AssessmentsResultRoute: AssessmentsResultRoute,
+  AssessmentsVerifyRoute: AssessmentsVerifyRoute,
 }
 
 const AssessmentsRouteWithChildren = AssessmentsRoute._addFileChildren(

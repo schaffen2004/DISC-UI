@@ -1,16 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Eye,
-  Loader2,
-  Lock,
-  MoreHorizontal,
-  Plus,
-  Search,
-  Unlock,
-  UserPlus,
-} from "lucide-react";
+import { Eye, Loader2, Lock, MoreHorizontal, Plus, Search, Unlock, UserPlus } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -46,12 +37,7 @@ import {
   type DiscSessionOverview,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
-import {
-  listUsers,
-  userDisplayName,
-  userInitials,
-  type UserListItem,
-} from "@/lib/api/users";
+import { listUsers, userDisplayName, userInitials, type UserListItem } from "@/lib/api/users";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assessments")({
@@ -97,10 +83,7 @@ function AssessmentsPage() {
     queryFn: listSessions,
     enabled: isAuthenticated,
   });
-  const sessions = useMemo(
-    () => filterSessionsForRole(allSessions, role),
-    [allSessions, role],
-  );
+  const sessions = useMemo(() => filterSessionsForRole(allSessions, role), [allSessions, role]);
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null;
   const overviewQuery = useQuery({
     queryKey: ["disc", "session", selectedSessionId, "overview"],
@@ -133,10 +116,7 @@ function AssessmentsPage() {
     Boolean(isStaff && session.isManager);
 
   const openDetails = (sessionId: string) => setSelectedSessionId(sessionId);
-  const onChangeStatus = (
-    session: { id: string },
-    nextStatus: "OPEN" | "CLOSED",
-  ) => {
+  const onChangeStatus = (session: { id: string }, nextStatus: "OPEN" | "CLOSED") => {
     statusMutation.mutate({ sessionId: session.id, nextStatus });
   };
 
@@ -221,8 +201,7 @@ function AssessmentsPage() {
             // INVITED / IN_PROGRESS — even on CLOSED sessions — means no result yet.
             const canViewResult =
               a.myParticipant &&
-              (a.myParticipant.status === "SUBMITTED" ||
-                a.myParticipant.status === "VERIFIED");
+              (a.myParticipant.status === "SUBMITTED" || a.myParticipant.status === "VERIFIED");
             const manage = canManageStatus(a);
             const canOpen = manage && (a.status === "DRAFT" || a.status === "CLOSED");
             const canClose = manage && a.status === "OPEN";
@@ -371,7 +350,7 @@ function AssessmentsPage() {
         open={Boolean(selectedSessionId)}
         onOpenChange={(open) => !open && setSelectedSessionId(null)}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{selectedSession?.title ?? "Session details"}</DialogTitle>
             <DialogDescription>Basic information and current session state.</DialogDescription>
@@ -419,15 +398,54 @@ function AssessmentsPage() {
 
               <div className="rounded-lg border p-3">
                 <div className="mb-2 text-sm font-medium">Participants status</div>
-                <div className="max-h-40 space-y-2 overflow-y-auto text-sm">
-                  {overviewQuery.data.participants.map((participant) => (
-                    <div key={participant.id} className="flex items-center justify-between gap-3">
-                      <span className="truncate text-muted-foreground">
-                        {participant.user.email}
-                      </span>
-                      <Badge variant="outline">{participantStatusLabel[participant.status]}</Badge>
-                    </div>
-                  ))}
+                <div className="max-h-56 space-y-2 overflow-y-auto text-sm">
+                  {overviewQuery.data.participants.map((participant) => {
+                    const canVerify = participant.status === "SUBMITTED";
+                    const canViewResult =
+                      Boolean(participant.result) ||
+                      participant.status === "SUBMITTED" ||
+                      participant.status === "VERIFIED";
+                    return (
+                      <div
+                        key={participant.id}
+                        className="flex flex-wrap items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-muted-foreground">
+                            {participant.user.email}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline">
+                            {participantStatusLabel[participant.status]}
+                          </Badge>
+                          {canVerify && (
+                            <Button variant="outline" size="sm" asChild>
+                              <Link
+                                to="/assessments/verify"
+                                search={{
+                                  sessionId: overviewQuery.data.id,
+                                  participantId: participant.id,
+                                }}
+                              >
+                                Verify
+                              </Link>
+                            </Button>
+                          )}
+                          {canViewResult && (
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link
+                                to="/assessments/result"
+                                search={{ participantId: participant.id }}
+                              >
+                                Result
+                              </Link>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                   {overviewQuery.data.participants.length === 0 && (
                     <p className="text-muted-foreground">No participants assigned.</p>
                   )}
@@ -452,9 +470,7 @@ function AssessmentsPage() {
                       ) : (
                         <Unlock className="h-4 w-4" />
                       )}
-                      {overviewQuery.data.status === "CLOSED"
-                        ? "Reopen session"
-                        : "Open session"}
+                      {overviewQuery.data.status === "CLOSED" ? "Reopen session" : "Open session"}
                     </Button>
                   )}
                   {overviewQuery.data.status === "OPEN" && (
@@ -516,16 +532,13 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
 
   const candidates = useMemo(() => {
     const list = usersQuery.data?.data ?? [];
-    return list.filter(
-      (u) => u.id !== user?.id && !existingUserIds.has(u.id),
-    );
+    return list.filter((u) => u.id !== user?.id && !existingUserIds.has(u.id));
   }, [usersQuery.data, user?.id, existingUserIds]);
 
   const selectedIds = Object.keys(selected);
 
   const inviteMutation = useMutation({
-    mutationFn: (participantIds: string[]) =>
-      updateSessionParticipants(session.id, participantIds),
+    mutationFn: (participantIds: string[]) => updateSessionParticipants(session.id, participantIds),
     onSuccess: async () => {
       setSelected({});
       setFormError(null);
@@ -596,9 +609,7 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
       )}
 
       {!usersQuery.isLoading && !usersQuery.isError && candidates.length === 0 && (
-        <p className="py-2 text-center text-sm text-muted-foreground">
-          No more users to invite.
-        </p>
+        <p className="py-2 text-center text-sm text-muted-foreground">No more users to invite.</p>
       )}
 
       <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
@@ -612,10 +623,7 @@ function InviteParticipantsPanel({ session }: { session: DiscSessionOverview }) 
                 isOn ? "border-primary bg-primary/5" : "hover:bg-muted/40",
               )}
             >
-              <Checkbox
-                checked={isOn}
-                onCheckedChange={(v) => toggleUser(u, Boolean(v))}
-              />
+              <Checkbox checked={isOn} onCheckedChange={(v) => toggleUser(u, Boolean(v))} />
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
                   {userInitials(u)}

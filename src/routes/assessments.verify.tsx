@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Loader2, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ClipboardCheck, Loader2 } from "lucide-react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -10,21 +10,25 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
-import { getAssessment, getSession, saveAssessmentDraft, submitAssessment } from "@/lib/api/disc";
+import { getSessionOverview, getVerification, submitVerification } from "@/lib/api/disc";
 
 const searchSchema = z.object({
   sessionId: z.string().uuid().optional(),
+  participantId: z.string().uuid().optional(),
 });
 
-export const Route = createFileRoute("/assessments/questionnaire")({
+export const Route = createFileRoute("/assessments/verify")({
   validateSearch: (search) => searchSchema.parse(search),
   head: () => ({
     meta: [
-      { title: "DISC Questionnaire — DigiWork" },
-      { name: "description", content: "Complete your DISC behavioral assessment." },
+      { title: "Manager verification — DigiWork" },
+      {
+        name: "description",
+        content: "Complete Level 5 manager validation for a submitted DISC assessment.",
+      },
     ],
   }),
-  component: QuestionnairePage,
+  component: VerifyPage,
 });
 
 function answersPayload(answers: Record<string, string>) {
@@ -36,89 +40,82 @@ function answersPayload(answers: Record<string, string>) {
   };
 }
 
-function QuestionnairePage() {
-  const { sessionId } = Route.useSearch();
+function VerifyPage() {
+  const { sessionId, participantId } = Route.useSearch();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [i, setI] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
-  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const assessmentQuery = useQuery({
-    queryKey: ["disc", "assessment", sessionId],
-    queryFn: () => getAssessment(sessionId!),
-    enabled: Boolean(isAuthenticated && sessionId),
+  const verificationQuery = useQuery({
+    queryKey: ["disc", "verification", sessionId, participantId],
+    queryFn: () => getVerification(sessionId!, participantId!),
+    enabled: Boolean(isAuthenticated && sessionId && participantId),
   });
 
-  const sessionQuery = useQuery({
-    queryKey: ["disc", "session", sessionId],
-    queryFn: () => getSession(sessionId!),
+  const overviewQuery = useQuery({
+    queryKey: ["disc", "session", sessionId, "overview"],
+    queryFn: () => getSessionOverview(sessionId!),
     enabled: Boolean(isAuthenticated && sessionId),
   });
 
   useEffect(() => {
-    if (!assessmentQuery.data || prefilled) return;
+    if (!verificationQuery.data || prefilled) return;
     const draft: Record<string, string> = {};
-    for (const a of assessmentQuery.data.answers) {
+    for (const a of verificationQuery.data.answers) {
       draft[a.questionId] = a.optionId;
     }
     setAnswers(draft);
     setPrefilled(true);
-    if (assessmentQuery.data.questions.length > 0) {
-      const firstUnanswered = assessmentQuery.data.questions.findIndex((q) => !draft[q.id]);
+    if (verificationQuery.data.questions.length > 0) {
+      const firstUnanswered = verificationQuery.data.questions.findIndex((q) => !draft[q.id]);
       setI(firstUnanswered >= 0 ? firstUnanswered : 0);
     }
-  }, [assessmentQuery.data, prefilled]);
+  }, [verificationQuery.data, prefilled]);
 
-  const status = assessmentQuery.data?.status;
-  const alreadySubmitted = status === "SUBMITTED" || status === "VERIFIED";
-
-  const draftMutation = useMutation({
-    mutationFn: () => saveAssessmentDraft(sessionId!, answersPayload(answers)),
-    onSuccess: () => {
-      setActionError(null);
-      setDraftSavedAt(new Date());
-    },
-    onError: (err) => {
-      setActionError(
-        err instanceof ApiError || err instanceof Error ? err.message : "Failed to save draft",
-      );
-    },
-  });
+  const participant = overviewQuery.data?.participants.find((p) => p.id === participantId);
+  const alreadyVerified = participant?.status === "VERIFIED";
 
   const submitMutation = useMutation({
-    mutationFn: () => submitAssessment(sessionId!, answersPayload(answers)),
+    mutationFn: () => submitVerification(sessionId!, participantId!, answersPayload(answers)),
     onSuccess: async () => {
       setActionError(null);
       setDone(true);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["disc", "sessions"] }),
-        queryClient.invalidateQueries({ queryKey: ["disc", "assessment", sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ["disc", "history", "me"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["disc", "session", sessionId, "overview"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["disc", "verification", sessionId, participantId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["disc", "result", participantId],
+        }),
       ]);
     },
     onError: (err) => {
       setActionError(
         err instanceof ApiError || err instanceof Error
           ? err.message
-          : "Failed to submit assessment",
+          : "Failed to submit verification",
       );
     },
   });
 
   const allAnswered = useMemo(() => {
-    const questions = assessmentQuery.data?.questions ?? [];
+    const questions = verificationQuery.data?.questions ?? [];
     return questions.length > 0 && questions.every((q) => Boolean(answers[q.id]));
-  }, [assessmentQuery.data?.questions, answers]);
+  }, [verificationQuery.data?.questions, answers]);
 
-  if (!sessionId) {
+  if (!sessionId || !participantId) {
     return (
       <CenteredMessage
-        title="Missing session"
-        body="Open this page with a sessionId query parameter, or pick a session from Assessments."
+        title="Missing parameters"
+        body="Open verification with sessionId and participantId, or pick a submitted participant from Assessments."
         action={
           <Button asChild>
             <Link to="/assessments">Back to assessments</Link>
@@ -132,7 +129,7 @@ function QuestionnairePage() {
     return (
       <CenteredMessage
         title="Sign in required"
-        body="You need to be signed in to take an assessment."
+        body="You need to be signed in as the session manager to verify assessments."
         action={
           <Button asChild>
             <Link to="/login">Sign in</Link>
@@ -142,31 +139,32 @@ function QuestionnairePage() {
     );
   }
 
-  if (authLoading || assessmentQuery.isLoading) {
+  if (authLoading || verificationQuery.isLoading) {
     return (
       <CenteredMessage
-        title="Loading assessment"
+        title="Loading verification"
         body={
           <span className="inline-flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" /> Fetching questions…
+            <Loader2 className="h-4 w-4 animate-spin" /> Fetching Level 5 questions…
           </span>
         }
       />
     );
   }
 
-  if (assessmentQuery.isError) {
+  if (verificationQuery.isError) {
+    const message =
+      verificationQuery.error instanceof Error
+        ? verificationQuery.error.message
+        : "Something went wrong";
+    const isNotSubmitted = message.includes("PARTICIPANT_HAS_NOT_SUBMITTED");
     return (
       <CenteredMessage
-        title="Could not load assessment"
-        body={
-          assessmentQuery.error instanceof Error
-            ? assessmentQuery.error.message
-            : "Something went wrong"
-        }
+        title={isNotSubmitted ? "Not ready to verify" : "Could not load verification"}
+        body={isNotSubmitted ? "This participant has not submitted their assessment yet." : message}
         action={
           <div className="flex gap-2 justify-center">
-            <Button variant="outline" onClick={() => assessmentQuery.refetch()}>
+            <Button variant="outline" onClick={() => verificationQuery.refetch()}>
               Retry
             </Button>
             <Button asChild>
@@ -178,27 +176,18 @@ function QuestionnairePage() {
     );
   }
 
-  if (alreadySubmitted && !done) {
+  if (alreadyVerified && !done) {
     return (
       <CenteredMessage
-        title="Assessment already submitted"
-        body={
-          status === "VERIFIED"
-            ? "Your manager has verified this assessment. You can view your results."
-            : "You have already submitted this assessment. Waiting for manager verification."
-        }
+        title="Already verified"
+        body="Manager validation for this participant is already complete."
         action={
           <div className="flex gap-2 justify-center">
-            {assessmentQuery.data?.participantId && (
-              <Button asChild>
-                <Link
-                  to="/assessments/result"
-                  search={{ participantId: assessmentQuery.data.participantId }}
-                >
-                  View my results
-                </Link>
-              </Button>
-            )}
+            <Button asChild>
+              <Link to="/assessments/result" search={{ participantId }}>
+                View result
+              </Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link to="/assessments">Back</Link>
             </Button>
@@ -208,14 +197,14 @@ function QuestionnairePage() {
     );
   }
 
-  const questions = assessmentQuery.data?.questions ?? [];
+  const questions = verificationQuery.data?.questions ?? [];
   const total = questions.length;
 
   if (total === 0) {
     return (
       <CenteredMessage
-        title="No questions"
-        body="This session has no Level 1–4 questions available."
+        title="No verification questions"
+        body="Level 5 manager validation questions are not available for this session."
         action={
           <Button asChild>
             <Link to="/assessments">Back to assessments</Link>
@@ -228,10 +217,9 @@ function QuestionnairePage() {
   const q = questions[Math.min(i, total - 1)];
   const answeredCount = questions.filter((question) => answers[question.id]).length;
   const pct = Math.round((answeredCount / total) * 100);
-  const remaining = total - answeredCount;
-  const remainingMinutes = Math.max(1, Math.ceil(remaining * 0.4));
-  const title = sessionQuery.data?.title ?? "DISC Assessment";
-  const isBusy = draftMutation.isPending || submitMutation.isPending;
+  const sessionTitle = overviewQuery.data?.title ?? "DISC Assessment";
+  const employeeLabel = participant?.user.email ?? "Employee";
+  const isBusy = submitMutation.isPending;
 
   if (done) {
     return (
@@ -240,24 +228,18 @@ function QuestionnairePage() {
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary animate-scale-in">
             <CheckCircle2 className="h-8 w-8" />
           </div>
-          <h1 className="mt-6 text-3xl font-semibold tracking-tight">Assessment submitted</h1>
+          <h1 className="mt-6 text-3xl font-semibold tracking-tight">Verification complete</h1>
           <p className="mt-2 text-muted-foreground">
-            Your answers have been submitted. You can view a preliminary result now; the final
-            profile is confirmed after your manager completes verification.
+            Manager validation has been submitted. The participant status is now Verified.
           </p>
           <div className="mt-8 flex justify-center gap-2">
-            {assessmentQuery.data?.participantId && (
-              <Button asChild size="lg">
-                <Link
-                  to="/assessments/result"
-                  search={{ participantId: assessmentQuery.data.participantId }}
-                >
-                  View my results
-                </Link>
-              </Button>
-            )}
+            <Button asChild size="lg">
+              <Link to="/assessments/result" search={{ participantId }}>
+                View result
+              </Link>
+            </Button>
             <Button variant="outline" size="lg" asChild>
-              <Link to="/">Back to dashboard</Link>
+              <Link to="/assessments">Back to assessments</Link>
             </Button>
           </div>
         </div>
@@ -271,24 +253,18 @@ function QuestionnairePage() {
         <div className="mx-auto max-w-3xl px-4 sm:px-6 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" />
+              <ClipboardCheck className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{title}</div>
+              <div className="truncate text-sm font-medium">{sessionTitle}</div>
               <div className="truncate text-xs text-muted-foreground">
-                Level {q.level} · {total} questions
+                Verify · {employeeLabel} · Level 5
               </div>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <Save className="h-3.5 w-3.5 text-[var(--success)]" />
-              {draftSavedAt ? `Draft saved ${draftSavedAt.toLocaleTimeString()}` : "Draft ready"}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" /> ~{remainingMinutes} min remaining
-            </span>
-          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/assessments">Cancel</Link>
+          </Button>
         </div>
         <div className="mx-auto max-w-3xl px-4 sm:px-6 pb-3">
           <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
@@ -304,7 +280,7 @@ function QuestionnairePage() {
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8 sm:py-14">
         <Card className="p-6 sm:p-10 animate-fade-in" key={q.id}>
           <div className="text-xs font-medium uppercase tracking-widest text-primary">
-            Question {String(i + 1).padStart(2, "0")} · Level {q.level}
+            Manager validation · Question {String(i + 1).padStart(2, "0")}
           </div>
           <h2 className="mt-4 text-xl sm:text-2xl font-semibold leading-snug tracking-tight">
             {q.question}
@@ -350,7 +326,7 @@ function QuestionnairePage() {
           </Card>
         )}
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-6 flex items-center justify-between gap-2">
           <Button
             variant="outline"
             onClick={() => setI(Math.max(0, i - 1))}
@@ -358,34 +334,20 @@ function QuestionnairePage() {
           >
             <ArrowLeft className="h-4 w-4" /> Previous
           </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => draftMutation.mutate()}
-              disabled={isBusy || answeredCount === 0}
-            >
-              {draftMutation.isPending ? (
+          {i === total - 1 ? (
+            <Button onClick={() => submitMutation.mutate()} disabled={!allAnswered || isBusy}>
+              {submitMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Save className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4" />
               )}
-              Save draft
+              Submit verification
             </Button>
-            {i === total - 1 ? (
-              <Button onClick={() => submitMutation.mutate()} disabled={!allAnswered || isBusy}>
-                {submitMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                Submit assessment
-              </Button>
-            ) : (
-              <Button onClick={() => setI(i + 1)} disabled={!answers[q.id] || isBusy}>
-                Next <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          ) : (
+            <Button onClick={() => setI(i + 1)} disabled={!answers[q.id] || isBusy}>
+              Next <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </main>
     </div>
