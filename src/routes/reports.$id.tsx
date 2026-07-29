@@ -23,8 +23,9 @@ import {
   downloadResultPdf,
   getMyHistory,
   getSessionOverview,
-  primaryDiscType,
+  topDimension,
   type DiscParticipantStatus,
+  type DiscScoreResult,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
 import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
@@ -71,9 +72,11 @@ function initials(email: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
-function topScore(pct?: Record<"D" | "I" | "S" | "C", number> | null) {
-  if (!pct) return null;
-  return Math.round(Math.max(pct.D, pct.I, pct.S, pct.C));
+function topScore(result?: DiscScoreResult | null) {
+  if (!result) return null;
+  return Math.round(
+    Math.max(result.D_percent, result.I_percent, result.S_percent, result.C_percent),
+  );
 }
 
 async function downloadPdf(participantId: string, filename: string) {
@@ -97,8 +100,8 @@ function MySessionReport() {
   });
 
   const mine = (historyQuery.data ?? []).find((h) => h.session.id === sessionId);
-  const disc = primaryDiscType(mine?.result?.dominantProfile);
-  const score = topScore(mine?.result?.natural?.percentage);
+  const disc = topDimension(mine?.result);
+  const score = topScore(mine?.result);
 
   return (
     <AppShell>
@@ -381,8 +384,8 @@ function StaffSessionReport() {
                         </TableRow>
                       )}
                       {participants.map((p) => {
-                        const disc = primaryDiscType(p.result?.dominantProfile);
-                        const score = topScore(p.result?.natural?.percentage);
+                        const disc = topDimension(p.result);
+                        const score = topScore(p.result);
                         return (
                           <TableRow key={p.id}>
                             <TableCell>
@@ -425,19 +428,6 @@ function StaffSessionReport() {
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-2">
-                                {p.status === "SUBMITTED" && (
-                                  <Button asChild size="sm">
-                                    <Link
-                                      to="/assessments/verify"
-                                      search={{
-                                        sessionId,
-                                        participantId: p.id,
-                                      }}
-                                    >
-                                      Verify
-                                    </Link>
-                                  </Button>
-                                )}
                                 {p.result ? (
                                   <>
                                     <Button asChild variant="outline" size="sm">

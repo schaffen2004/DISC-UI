@@ -14,7 +14,7 @@ const en = {
   "nav.new": "New",
   "nav.result": "Result",
   "nav.questionnaire": "Questionnaire",
-  "nav.verify": "Verify",
+
   "common.guest": "Guest",
   "common.signInToContinue": "Sign in to continue",
   "common.signOut": "Sign out",
@@ -31,7 +31,7 @@ const en = {
   "common.open": "Open",
   "common.reopen": "Reopen",
   "common.close": "Close",
-  "common.verify": "Verify",
+
   "common.result": "Result",
   "common.take": "Take",
   "common.invite": "Invite",
@@ -48,7 +48,6 @@ const en = {
   "disc.level.2": "Natural",
   "disc.level.3": "Pressure",
   "disc.level.4": "Motivator / Fear",
-  "disc.level.5": "Manager validation",
   "disc.sectionFallback": "Section {level}",
   "user.status.New": "New",
   "user.status.Active": "Active",
@@ -71,16 +70,13 @@ const en = {
   "questionnaire.loadFailed": "Could not load assessment",
   "questionnaire.somethingWrong": "Something went wrong",
   "questionnaire.alreadySubmitted": "Assessment already submitted",
-  "questionnaire.alreadyVerifiedBody":
-    "Your manager has verified this assessment. You can view your results.",
-  "questionnaire.waitingVerifyBody":
-    "You have already submitted this assessment. Waiting for manager verification.",
+  "questionnaire.alreadySubmittedBody":
+    "You have already submitted this assessment. You can view your results.",
   "questionnaire.viewResults": "View my results",
   "questionnaire.noQuestions": "No questions",
   "questionnaire.noQuestionsBody": "This session has no questions available.",
   "questionnaire.submittedTitle": "Assessment submitted",
-  "questionnaire.submittedBody":
-    "Your answers have been submitted. You can view a preliminary result now; the final profile is confirmed after your manager completes verification.",
+  "questionnaire.submittedBody": "Your answers have been submitted. You can view your result now.",
   "questionnaire.backDashboard": "Back to dashboard",
   "questionnaire.meta": "{section} · {sections} sections · {total} questions",
   "questionnaire.savingDraft": "Saving draft…",
@@ -88,13 +84,11 @@ const en = {
   "questionnaire.draftHint": "Press Save draft to keep progress",
   "questionnaire.unsavedNotice":
     "You have unanswered draft changes. Press Save draft or your progress may be lost if you leave.",
-  "questionnaire.leaveUnsavedConfirm":
-    "You have unsaved answers. Leave without saving the draft?",
+  "questionnaire.leaveUnsavedConfirm": "You have unsaved answers. Leave without saving the draft?",
   "questionnaire.remaining": "~{minutes} min remaining",
   "questionnaire.progressHint": "{section}: {current}/{sectionTotal}",
   "questionnaire.overall": "Overall {answered}/{total}",
-  "questionnaire.questionLabel":
-    "{section} · Question {current} of {sectionTotal}",
+  "questionnaire.questionLabel": "{section} · Question {current} of {sectionTotal}",
   "questionnaire.submitAssessment": "Submit assessment",
   "questionnaire.sectionProgress": "Section progress: {answered}/{total} answered",
   "questionnaire.savedRatio": "Saved {saved}/{total}",
@@ -172,20 +166,23 @@ const en = {
   "auth.loginHeroBadge": "DISC assessment workspace",
   "auth.loginHeroTitle": "Map D·I·S·C profiles across your whole team.",
   "auth.loginHeroBody": "Understand behavior. Build stronger teams.",
-  "auth.loginHeroFeature1": "Four DISC lenses — Adaptive, Natural, Pressure, Motivator/Fear",
-  "auth.loginHeroFeature2": "Manager verification (Level 5) after employees submit",
+  "auth.loginHeroFeature1": "60 Likert-scale questions across four DISC dimensions",
+  "auth.loginHeroFeature2": "Automatic scoring with consistency analysis",
   "auth.loginHeroFeature3": "Session overview, PDF reports, and team comparisons",
   "auth.loginHeroQuote":
     "“We finally see Adaptive vs Natural side by side — and managers can validate before we act on the report.”",
   "auth.loginHeroQuoteBy": "HR team using DigiWork DISC",
   "assessments.title": "Assessments",
-  "assessments.subtitleOperator": "Sessions you manage, joined, or that are currently open to all members.",
-  "assessments.subtitleAll": "Assessment campaigns across your organization. Open sessions are available to every member.",
+  "assessments.subtitleOperator":
+    "Sessions you manage, joined, or that are currently open to all members.",
+  "assessments.subtitleAll":
+    "Assessment campaigns across your organization. Open sessions are available to every member.",
   "assessments.new": "New Assessment",
   "assessments.signInPrompt": "Please {link} to load assessments from the API.",
   "assessments.signInLink": "sign in",
   "assessments.loading": "Loading sessions…",
-  "assessments.empty": "No assessment sessions yet. Create one to get started — participants are optional.",
+  "assessments.empty":
+    "No assessment sessions yet. Create one to get started — participants are optional.",
   "assessments.participants": "{count} participant",
   "assessments.participants_plural": "{count} participants",
   "assessments.participantsLabel": "Participants",
@@ -195,7 +192,8 @@ const en = {
   "assessments.sessionDetailsDesc": "Basic information and current session state.",
   "assessments.loadingDetails": "Loading session details…",
   "assessments.participantsStatus": "Participants status",
-  "assessments.noParticipants": "No one enrolled yet. Members can self-join while the session is open.",
+  "assessments.noParticipants":
+    "No one enrolled yet. Members can self-join while the session is open.",
   "assessments.inviteTitle": "Invite participants",
   "assessments.inviteHint":
     "Optional — open sessions already allow any member to join. Use this to pre-invite specific people.",
@@ -233,7 +231,7 @@ const vi: Record<MessageKey, string> = {
   "nav.new": "Tạo mới",
   "nav.result": "Kết quả",
   "nav.questionnaire": "Bài làm",
-  "nav.verify": "Xác minh",
+
   "common.guest": "Khách",
   "common.signInToContinue": "Đăng nhập để tiếp tục",
   "common.signOut": "Đăng xuất",
@@ -250,7 +248,7 @@ const vi: Record<MessageKey, string> = {
   "common.open": "Mở",
   "common.reopen": "Mở lại",
   "common.close": "Đóng",
-  "common.verify": "Xác minh",
+
   "common.result": "Kết quả",
   "common.take": "Làm bài",
   "common.invite": "Mời",
@@ -267,7 +265,6 @@ const vi: Record<MessageKey, string> = {
   "disc.level.2": "Tự nhiên",
   "disc.level.3": "Áp lực",
   "disc.level.4": "Động lực / Nỗi sợ",
-  "disc.level.5": "Xác minh quản lý",
   "disc.sectionFallback": "Phần {level}",
   "user.status.New": "Mới",
   "user.status.Active": "Hoạt động",
@@ -280,8 +277,7 @@ const vi: Record<MessageKey, string> = {
   "participant.status.SUBMITTED": "Đã nộp",
   "participant.status.VERIFIED": "Đã xác minh",
   "questionnaire.missingSession": "Thiếu phiên làm bài",
-  "questionnaire.missingSessionBody":
-    "Mở trang này kèm sessionId, hoặc chọn một đợt từ Đánh giá.",
+  "questionnaire.missingSessionBody": "Mở trang này kèm sessionId, hoặc chọn một đợt từ Đánh giá.",
   "questionnaire.backToAssessments": "Về danh sách đánh giá",
   "questionnaire.signInRequired": "Cần đăng nhập",
   "questionnaire.signInBody": "Bạn cần đăng nhập để làm bài đánh giá.",
@@ -290,16 +286,12 @@ const vi: Record<MessageKey, string> = {
   "questionnaire.loadFailed": "Không tải được bài đánh giá",
   "questionnaire.somethingWrong": "Đã xảy ra lỗi",
   "questionnaire.alreadySubmitted": "Bài đã được nộp",
-  "questionnaire.alreadyVerifiedBody":
-    "Quản lý đã xác minh bài đánh giá này. Bạn có thể xem kết quả.",
-  "questionnaire.waitingVerifyBody":
-    "Bạn đã nộp bài. Đang chờ quản lý xác minh.",
+  "questionnaire.alreadySubmittedBody": "Bạn đã nộp bài đánh giá này. Bạn có thể xem kết quả.",
   "questionnaire.viewResults": "Xem kết quả của tôi",
   "questionnaire.noQuestions": "Không có câu hỏi",
   "questionnaire.noQuestionsBody": "Đợt đánh giá này chưa có câu hỏi.",
   "questionnaire.submittedTitle": "Đã nộp bài",
-  "questionnaire.submittedBody":
-    "Câu trả lời đã được gửi. Bạn có thể xem kết quả sơ bộ; hồ sơ cuối được xác nhận sau khi quản lý hoàn tất xác minh.",
+  "questionnaire.submittedBody": "Câu trả lời đã được gửi. Bạn có thể xem kết quả ngay.",
   "questionnaire.backDashboard": "Về trang chủ",
   "questionnaire.meta": "{section} · {sections} phần · {total} câu hỏi",
   "questionnaire.savingDraft": "Đang lưu nháp…",
@@ -307,13 +299,11 @@ const vi: Record<MessageKey, string> = {
   "questionnaire.draftHint": "Nhấn Lưu nháp để giữ tiến độ",
   "questionnaire.unsavedNotice":
     "Bạn chưa lưu nháp. Hãy bấm Lưu nháp để giữ bài làm — nếu thoát mà chưa lưu, tiến độ có thể bị mất.",
-  "questionnaire.leaveUnsavedConfirm":
-    "Bạn chưa lưu nháp. Vẫn thoát mà không lưu?",
+  "questionnaire.leaveUnsavedConfirm": "Bạn chưa lưu nháp. Vẫn thoát mà không lưu?",
   "questionnaire.remaining": "~{minutes} phút còn lại",
   "questionnaire.progressHint": "{section}: {current}/{sectionTotal}",
   "questionnaire.overall": "Tổng {answered}/{total}",
-  "questionnaire.questionLabel":
-    "{section} · Câu {current} / {sectionTotal}",
+  "questionnaire.questionLabel": "{section} · Câu {current} / {sectionTotal}",
   "questionnaire.submitAssessment": "Nộp bài đánh giá",
   "questionnaire.sectionProgress": "Tiến độ phần: {answered}/{total} đã trả lời",
   "questionnaire.savedRatio": "Đã lưu {saved}/{total}",
@@ -391,8 +381,8 @@ const vi: Record<MessageKey, string> = {
   "auth.loginHeroBadge": "Không gian đánh giá DISC",
   "auth.loginHeroTitle": "Nhìn rõ hồ sơ D·I·S·C của cả đội ngũ.",
   "auth.loginHeroBody": "Hiểu hành vi. Xây đội ngũ vững hơn.",
-  "auth.loginHeroFeature1": "Bốn góc nhìn DISC — Thích nghi, Tự nhiên, Áp lực, Động lực/Nỗi sợ",
-  "auth.loginHeroFeature2": "Xác minh quản lý (Level 5) sau khi nhân viên nộp bài",
+  "auth.loginHeroFeature1": "60 câu Likert theo bốn chiều DISC",
+  "auth.loginHeroFeature2": "Chấm điểm tự động với phân tích độ nhất quán",
   "auth.loginHeroFeature3": "Tổng quan đợt đánh giá, báo cáo PDF và so sánh nhóm",
   "auth.loginHeroQuote":
     "“Chúng tôi thấy Adaptive và Natural cạnh nhau — quản lý xác minh xong mới dùng báo cáo để ra quyết định.”",
@@ -417,8 +407,7 @@ const vi: Record<MessageKey, string> = {
   "assessments.sessionDetailsDesc": "Thông tin cơ bản và trạng thái hiện tại.",
   "assessments.loadingDetails": "Đang tải chi tiết…",
   "assessments.participantsStatus": "Trạng thái người tham gia",
-  "assessments.noParticipants":
-    "Chưa ai ghi danh. Thành viên có thể tự tham gia khi đợt còn mở.",
+  "assessments.noParticipants": "Chưa ai ghi danh. Thành viên có thể tự tham gia khi đợt còn mở.",
   "assessments.inviteTitle": "Mời thêm người",
   "assessments.inviteHint":
     "Tuỳ chọn — đợt OPEN đã cho mọi thành viên tự tham gia. Dùng để mời sẵn một số người.",

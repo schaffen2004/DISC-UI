@@ -21,8 +21,9 @@ import { useAuth } from "@/lib/auth";
 import {
   getMyHistory,
   listSessions,
-  primaryDiscType,
+  topDimension,
   type DiscParticipantStatus,
+  type DiscScoreResult,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
 import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
@@ -82,9 +83,11 @@ function formatDate(value?: string | null) {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 }
 
-function topScore(pct?: Record<"D" | "I" | "S" | "C", number> | null) {
-  if (!pct) return null;
-  return Math.round(Math.max(pct.D, pct.I, pct.S, pct.C));
+function topScore(result?: DiscScoreResult | null) {
+  if (!result) return null;
+  return Math.round(
+    Math.max(result.D_percent, result.I_percent, result.S_percent, result.C_percent),
+  );
 }
 
 function ReportsLayout() {
@@ -123,8 +126,7 @@ function StaffReportsPage() {
     if (!term) return allManaged;
     return allManaged.filter(
       (s) =>
-        s.title.toLowerCase().includes(term) ||
-        (s.description ?? "").toLowerCase().includes(term),
+        s.title.toLowerCase().includes(term) || (s.description ?? "").toLowerCase().includes(term),
     );
   }, [allManaged, q]);
 
@@ -158,8 +160,10 @@ function StaffReportsPage() {
         </Card>
       )}
 
-      {isAuthenticated && !sessionsQuery.isLoading && !sessionsQuery.isError && (
-        allManaged.length === 0 ? (
+      {isAuthenticated &&
+        !sessionsQuery.isLoading &&
+        !sessionsQuery.isError &&
+        (allManaged.length === 0 ? (
           <EmptyAssessmentsNotice
             description="Chưa có bài đánh giá nào được tạo. Tạo assessment mới để bắt đầu theo dõi báo cáo."
             action={
@@ -186,7 +190,7 @@ function StaffReportsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead>Session</TableHead>
+                      <TableHead className="pl-4">Session</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Participants</TableHead>
                       <TableHead>Created</TableHead>
@@ -196,14 +200,17 @@ function StaffReportsPage() {
                   <TableBody>
                     {sessions.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
+                        <TableCell
+                          colSpan={5}
+                          className="h-24 text-center text-sm text-muted-foreground"
+                        >
                           Không tìm thấy bài đánh giá phù hợp.
                         </TableCell>
                       </TableRow>
                     )}
                     {sessions.map((s) => (
                       <TableRow key={s.id}>
-                        <TableCell>
+                        <TableCell className="pl-4">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{s.title}</div>
                             {s.description && (
@@ -247,8 +254,7 @@ function StaffReportsPage() {
               </div>
             </Card>
           </>
-        )
-      )}
+        ))}
     </div>
   );
 }
@@ -269,9 +275,7 @@ function MyReportsPage() {
     const term = q.trim().toLowerCase();
     if (!term) return allHistory;
     return allHistory.filter(
-      (h) =>
-        h.session.title.toLowerCase().includes(term) ||
-        h.status.toLowerCase().includes(term),
+      (h) => h.session.title.toLowerCase().includes(term) || h.status.toLowerCase().includes(term),
     );
   }, [allHistory, q]);
 
@@ -305,8 +309,10 @@ function MyReportsPage() {
         </Card>
       )}
 
-      {isAuthenticated && !historyQuery.isLoading && !historyQuery.isError && (
-        allHistory.length === 0 ? (
+      {isAuthenticated &&
+        !historyQuery.isLoading &&
+        !historyQuery.isError &&
+        (allHistory.length === 0 ? (
           <EmptyAssessmentsNotice
             description="Bạn chưa có bài đánh giá nào. Khi được giao bài DISC, báo cáo sẽ xuất hiện tại đây."
             action={
@@ -334,7 +340,7 @@ function MyReportsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead>Session</TableHead>
+                      <TableHead className="pl-4">Session</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>DISC</TableHead>
                       <TableHead>Score</TableHead>
@@ -345,17 +351,20 @@ function MyReportsPage() {
                   <TableBody>
                     {rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">
+                        <TableCell
+                          colSpan={6}
+                          className="h-24 text-center text-sm text-muted-foreground"
+                        >
                           Không tìm thấy bài đánh giá phù hợp.
                         </TableCell>
                       </TableRow>
                     )}
                     {rows.map((h) => {
-                      const disc = primaryDiscType(h.result?.dominantProfile);
-                      const score = topScore(h.result?.natural?.percentage);
+                      const disc = topDimension(h.result);
+                      const score = topScore(h.result);
                       return (
                         <TableRow key={h.participantId}>
-                          <TableCell>
+                          <TableCell className="pl-4">
                             <div className="min-w-0">
                               <div className="truncate text-sm font-medium">{h.session.title}</div>
                               <div className="text-xs text-muted-foreground">
@@ -411,8 +420,7 @@ function MyReportsPage() {
               </div>
             </Card>
           </>
-        )
-      )}
+        ))}
     </div>
   );
 }

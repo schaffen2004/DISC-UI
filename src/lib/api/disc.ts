@@ -3,25 +3,24 @@ import { apiFetch, getApiBaseUrl, getStoredToken } from "./client";
 export type DiscSessionStatus = "DRAFT" | "OPEN" | "CLOSED";
 export type DiscParticipantStatus = "INVITED" | "IN_PROGRESS" | "SUBMITTED" | "VERIFIED";
 
-export type DiscScores = {
-  raw?: Record<"D" | "I" | "S" | "C", number>;
-  percentage?: Record<"D" | "I" | "S" | "C", number>;
-  dominantProfile?: string;
-  totalLabelPoints?: number;
-};
+export type DiscConsistencyLevel = "High" | "Acceptable" | "Unstable" | "Low";
 
-export type DiscResult = {
-  id: string;
-  adaptive: DiscScores;
-  natural: DiscScores;
-  pressure: DiscScores;
-  motivatorFear: DiscScores;
-  managerValidation?: DiscScores | null;
-  naturalAdaptiveDelta?: Record<string, number>;
-  managerDelta?: Record<string, number> | null;
-  dominantProfile: string;
-  algorithmVersion: string;
-  calculatedAt: string;
+/**
+ * Flat score result from backend `scoreDisc()`.
+ * Raw D/I/S/C are sums of 12 main Likert items (range 12–60).
+ * Percent = ((raw - 12) / 48) * 100.
+ */
+export type DiscScoreResult = {
+  D: number;
+  I: number;
+  S: number;
+  C: number;
+  D_percent: number;
+  I_percent: number;
+  S_percent: number;
+  C_percent: number;
+  consistency: number;
+  consistency_level: DiscConsistencyLevel;
 };
 
 export type DiscSessionListItem = {
@@ -48,7 +47,7 @@ export type DiscHistoryItem = {
   status: DiscParticipantStatus;
   submittedAt?: string | null;
   verifiedAt?: string | null;
-  result?: DiscResult | null;
+  result?: DiscScoreResult | null;
 };
 
 export type DiscQuestionOption = {
@@ -59,8 +58,7 @@ export type DiscQuestionOption = {
 
 export type DiscQuestion = {
   id: string;
-  sourceId: number;
-  level: number;
+  sourceId: string;
   question: string;
   options: DiscQuestionOption[];
 };
@@ -80,39 +78,15 @@ export type DiscTemplateBank = {
   createdAt: string;
 };
 
-export type DiscTemplateLevelSummary = {
-  level: number;
-  count: number;
-};
-
 export type DiscTemplate = {
   bank: DiscTemplateBank;
-  levels: number[];
   questionCount: number;
-  levelSummary: DiscTemplateLevelSummary[];
   questions: DiscQuestion[];
 };
 
-export type GetDiscTemplateParams = {
-  levels?: string;
-  includeManager?: boolean;
-};
-
-export function getTemplate(params: GetDiscTemplateParams = {}) {
-  const q = new URLSearchParams();
-  if (params.levels) q.set("levels", params.levels);
-  if (params.includeManager != null) q.set("includeManager", String(params.includeManager));
-  const qs = q.toString();
-  return apiFetch<DiscTemplate>(`/disc/template${qs ? `?${qs}` : ""}`);
+export function getTemplate() {
+  return apiFetch<DiscTemplate>("/disc/template");
 }
-
-export const discLevelLabel: Record<number, string> = {
-  1: "Adaptive",
-  2: "Natural",
-  3: "Pressure",
-  4: "Motivator / Fear",
-  5: "Manager validation",
-};
 
 export type CreateDiscSessionPayload = {
   title: string;
@@ -137,9 +111,7 @@ export function listSessions() {
 export function filterSessionsForRole(sessions: DiscSessionListItem[], role?: string | null) {
   const r = (role ?? "").trim().toUpperCase();
   if (r === "OPERATOR") {
-    return sessions.filter(
-      (s) => s.isManager || Boolean(s.myParticipant) || s.status === "OPEN",
-    );
+    return sessions.filter((s) => s.isManager || Boolean(s.myParticipant) || s.status === "OPEN");
   }
   return sessions;
 }
@@ -193,7 +165,7 @@ export type DiscSessionOverviewParticipant = {
   status: DiscParticipantStatus;
   submittedAt?: string | null;
   verifiedAt?: string | null;
-  result?: DiscResult | null;
+  result?: DiscScoreResult | null;
 };
 
 export type DiscSessionOverview = {
@@ -227,12 +199,6 @@ export type SaveDiscAnswersPayload = {
   answers: DiscAnswerItem[];
 };
 
-export type DiscVerification = {
-  participantId: string;
-  questions: DiscQuestion[];
-  answers: DiscAnswerItem[];
-};
-
 export function saveAssessmentDraft(sessionId: string, payload: SaveDiscAnswersPayload) {
   return apiFetch<{ answerCount: number }>(`/disc/sessions/${sessionId}/assessment/draft`, {
     method: "PUT",
@@ -242,23 +208,6 @@ export function saveAssessmentDraft(sessionId: string, payload: SaveDiscAnswersP
 
 export function submitAssessment(sessionId: string, payload: SaveDiscAnswersPayload) {
   return apiFetch(`/disc/sessions/${sessionId}/assessment/submit`, {
-    method: "POST",
-    body: payload,
-  });
-}
-
-export function getVerification(sessionId: string, participantId: string) {
-  return apiFetch<DiscVerification>(
-    `/disc/sessions/${sessionId}/participants/${participantId}/verification`,
-  );
-}
-
-export function submitVerification(
-  sessionId: string,
-  participantId: string,
-  payload: SaveDiscAnswersPayload,
-) {
-  return apiFetch(`/disc/sessions/${sessionId}/participants/${participantId}/verification/submit`, {
     method: "POST",
     body: payload,
   });
@@ -320,9 +269,22 @@ export const participantStatusLabel: Record<DiscParticipantStatus, string> = {
   VERIFIED: "Verified",
 };
 
-export function primaryDiscType(profile?: string | null): "D" | "I" | "S" | "C" | null {
-  if (!profile) return null;
-  const ch = profile.trim().charAt(0).toUpperCase();
-  if (ch === "D" || ch === "I" || ch === "S" || ch === "C") return ch;
-  return null;
+/** Helper to extract the highest-scoring dimension from a flat score result. */
+export function topDimension(result?: DiscScoreResult | null): "D" | "I" | "S" | "C" | null {
+  if (!result) return null;
+  let best: "D" | "I" | "S" | "C" = "D";
+  for (const k of ["I", "S", "C"] as const) {
+    if ((result[`${k}_percent`] ?? 0) > (result[`${best}_percent`] ?? 0)) best = k;
+  }
+  return best;
 }
+
+export const DISC_DIMENSIONS = ["D", "I", "S", "C"] as const;
+export type DiscDimension = (typeof DISC_DIMENSIONS)[number];
+
+export const discDimensionName: Record<DiscDimension, string> = {
+  D: "Dominance",
+  I: "Influence",
+  S: "Steadiness",
+  C: "Compliance",
+};

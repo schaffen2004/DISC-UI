@@ -32,8 +32,9 @@ import {
   getMyHistory,
   getSessionOverview,
   listSessions,
-  primaryDiscType,
+  topDimension,
   type DiscHistoryItem,
+  type DiscScoreResult,
   type DiscSessionListItem,
   type DiscSessionOverview,
 } from "@/lib/api/disc";
@@ -67,12 +68,12 @@ function MyAnalytics() {
   const latest = withResult[0];
 
   const scores = useMemo(() => {
-    const pct = latest?.result?.natural?.percentage ?? latest?.result?.adaptive?.percentage ?? null;
+    const r = latest?.result;
     return {
-      D: Math.round(pct?.D ?? 0),
-      I: Math.round(pct?.I ?? 0),
-      S: Math.round(pct?.S ?? 0),
-      C: Math.round(pct?.C ?? 0),
+      D: Math.round(r?.D_percent ?? 0),
+      I: Math.round(r?.I_percent ?? 0),
+      S: Math.round(r?.S_percent ?? 0),
+      C: Math.round(r?.C_percent ?? 0),
     };
   }, [latest]);
 
@@ -89,7 +90,7 @@ function MyAnalytics() {
   }));
 
   const trendData = useMemo(() => buildPersonalTrend(withResult), [withResult]);
-  const dominant = primaryDiscType(latest?.result?.dominantProfile);
+  const dominant = topDimension(latest?.result);
 
   return (
     <div className="space-y-6">
@@ -286,13 +287,13 @@ function MyAnalytics() {
 
 function buildPersonalTrend(items: DiscHistoryItem[]) {
   return [...items].reverse().map((h, idx) => {
-    const pct = h.result?.natural?.percentage;
+    const r = h.result;
     return {
       label: h.session.title.slice(0, 12) || `#${idx + 1}`,
-      D: Math.round(pct?.D ?? 0),
-      I: Math.round(pct?.I ?? 0),
-      S: Math.round(pct?.S ?? 0),
-      C: Math.round(pct?.C ?? 0),
+      D: Math.round(r?.D_percent ?? 0),
+      I: Math.round(r?.I_percent ?? 0),
+      S: Math.round(r?.S_percent ?? 0),
+      C: Math.round(r?.C_percent ?? 0),
     };
   });
 }
@@ -339,10 +340,10 @@ function buildMonthTrend(sessions: DiscSessionListItem[]) {
   }));
 }
 
-function buildDiscCounts(profiles: Array<string | null | undefined>) {
+function buildDiscCounts(results: Array<DiscScoreResult | null | undefined>) {
   const counts = { D: 0, I: 0, S: 0, C: 0 };
-  for (const profile of profiles) {
-    const t = primaryDiscType(profile);
+  for (const r of results) {
+    const t = topDimension(r);
     if (t) counts[t] += 1;
   }
   const total = counts.D + counts.I + counts.S + counts.C;
@@ -411,10 +412,7 @@ function StaffAnalytics() {
     ? Math.round((doneCount / allParticipants.length) * 100)
     : 0;
 
-  const discPie = useMemo(
-    () => buildDiscCounts(withResult.map((p) => p.result?.dominantProfile)),
-    [withResult],
-  );
+  const discPie = useMemo(() => buildDiscCounts(withResult.map((p) => p.result)), [withResult]);
   const hasDiscData = discPie.some((d) => d.count > 0);
 
   const statusPie = useMemo(() => {
@@ -453,12 +451,12 @@ function StaffAnalytics() {
     const sums = { D: 0, I: 0, S: 0, C: 0 };
     let n = 0;
     for (const p of withResult) {
-      const pct = p.result?.natural?.percentage ?? p.result?.adaptive?.percentage;
-      if (!pct) continue;
-      sums.D += pct.D ?? 0;
-      sums.I += pct.I ?? 0;
-      sums.S += pct.S ?? 0;
-      sums.C += pct.C ?? 0;
+      const r = p.result;
+      if (!r) continue;
+      sums.D += r.D_percent ?? 0;
+      sums.I += r.I_percent ?? 0;
+      sums.S += r.S_percent ?? 0;
+      sums.C += r.C_percent ?? 0;
       n += 1;
     }
     return (["D", "I", "S", "C"] as const).map((axis) => ({
@@ -472,7 +470,7 @@ function StaffAnalytics() {
       .map((o) => {
         const counts = { D: 0, I: 0, S: 0, C: 0 };
         for (const p of o.participants) {
-          const t = primaryDiscType(p.result?.dominantProfile);
+          const t = topDimension(p.result);
           if (t) counts[t] += 1;
         }
         const total = counts.D + counts.I + counts.S + counts.C;

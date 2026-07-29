@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Printer, ArrowRight, Loader2 } from "lucide-react";
+import { Download, Printer, Loader2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
   PolarAngleAxis,
@@ -13,15 +13,21 @@ import {
 import { z } from "zod";
 
 import { AppShell } from "@/components/app-shell";
-import { DiscBadge } from "@/components/disc-badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { discFullName, discProfile } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
-import { downloadResultPdf, getResult, primaryDiscType } from "@/lib/api/disc";
+import {
+  downloadResultPdf,
+  getResult,
+  topDimension,
+  DISC_DIMENSIONS,
+  discDimensionName,
+  type DiscScoreResult,
+  type DiscConsistencyLevel,
+} from "@/lib/api/disc";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +39,24 @@ function isDiscResultNotFound(error: unknown) {
   const message = error instanceof ApiError || error instanceof Error ? error.message : "";
   return message.includes("DISC_RESULT_NOT_FOUND");
 }
+
+const consistencyStyle: Record<
+  DiscConsistencyLevel,
+  { label: string; color: string; description: string }
+> = {
+  High: { label: "Cao", color: "text-[var(--success)]", description: "Câu trả lời rất nhất quán" },
+  Acceptable: {
+    label: "Chấp nhận",
+    color: "text-primary",
+    description: "Câu trả lời khá nhất quán",
+  },
+  Unstable: {
+    label: "Không ổn định",
+    color: "text-[var(--warning)]",
+    description: "Có sự khác biệt đáng kể giữa các câu trả lời",
+  },
+  Low: { label: "Thấp", color: "text-destructive", description: "Câu trả lời thiếu nhất quán" },
+};
 
 export const Route = createFileRoute("/assessments/result")({
   validateSearch: (search) => searchSchema.parse(search),
@@ -157,7 +181,7 @@ function ResultPage() {
     );
   }
 
-  const result = data?.result;
+  const result = data?.result as DiscScoreResult | null | undefined;
   if (!result) {
     const didNotParticipate = data?.status === "INVITED" || data?.status === "IN_PROGRESS";
     return (
@@ -179,25 +203,12 @@ function ResultPage() {
     );
   }
 
-  const scores = result.natural?.percentage ??
-    result.adaptive?.percentage ?? {
-      D: 0,
-      I: 0,
-      S: 0,
-      C: 0,
-    };
-  const dominant = primaryDiscType(result.dominantProfile) ?? "D";
-  const radar = (["D", "I", "S", "C"] as const).map((axis) => ({
+  const radar = DISC_DIMENSIONS.map((axis) => ({
     axis,
-    value: scores[axis] ?? 0,
+    value: result[`${axis}_percent`] ?? 0,
   }));
-  const completedAt = result.calculatedAt
-    ? new Date(result.calculatedAt).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : "—";
+  const top = topDimension(result);
+  const cLevel = consistencyStyle[result.consistency_level] ?? consistencyStyle.High;
 
   return (
     <AppShell>
@@ -210,13 +221,6 @@ function ResultPage() {
             <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight">
               {data?.session.title ?? t("result.yourProfile")}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("result.completed", {
-                date: completedAt,
-                profile: result.dominantProfile,
-                algo: result.algorithmVersion,
-              })}
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => window.print()}>
@@ -244,9 +248,7 @@ function ResultPage() {
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>DISC Radar</CardTitle>
-              <CardDescription>
-                Natural style distribution across the four dimensions
-              </CardDescription>
+              <CardDescription>Phân bố phần trăm theo bốn chiều D·I·S·C</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[360px]">
@@ -277,141 +279,69 @@ function ResultPage() {
 
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Dominant type</span>
-                <DiscBadge type={dominant} showLabel />
-              </div>
-              <CardTitle className="text-2xl">{result.dominantProfile}</CardTitle>
-              <CardDescription>{discFullName[dominant]} · Natural style</CardDescription>
+              <CardTitle className="text-lg">Điểm theo chiều</CardTitle>
+              <CardDescription>Phần trăm và điểm thô (12–60)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {(Object.entries(scores) as ["D" | "I" | "S" | "C", number][]).map(([k, v]) => (
-                <div key={k}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="font-medium">
-                      <span
-                        className="mr-2 inline-grid h-4 w-4 place-items-center rounded-sm text-[10px] font-bold text-white"
-                        style={{ background: `var(--disc-${k.toLowerCase()})` }}
-                      >
-                        {k}
+              {DISC_DIMENSIONS.map((k) => {
+                const pctVal = result[`${k}_percent`] ?? 0;
+                const rawVal = result[k] ?? 0;
+                const isTop = k === top;
+                return (
+                  <div key={k}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="font-medium">
+                        <span
+                          className={cn(
+                            "mr-2 inline-grid h-4 w-4 place-items-center rounded-sm text-[10px] font-bold text-white",
+                            isTop && "ring-2 ring-offset-1",
+                          )}
+                          style={{ background: `var(--disc-${k.toLowerCase()})` }}
+                        >
+                          {k}
+                        </span>
+                        {discDimensionName[k]}
                       </span>
-                      {discFullName[k]}
-                    </span>
-                    <span className="tabular-nums font-semibold">{v}%</span>
+                      <span className="tabular-nums font-semibold">
+                        {pctVal}%{" "}
+                        <span className="text-muted-foreground font-normal">({rawVal}/60)</span>
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${pctVal}%`,
+                          background: `var(--disc-${k.toLowerCase()})`,
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${v}%`,
-                        background: `var(--disc-${k.toLowerCase()})`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               <Separator className="my-3" />
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/reports/$id" params={{ id: data.session.id }}>
-                  View session report <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Độ nhất quán</span>
+                  <Badge variant="outline" className={cn("font-semibold", cLevel.color)}>
+                    {result.consistency}% — {cLevel.label}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{cLevel.description}</p>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {(
-            [
-              { label: t("disc.level.1"), level: result.adaptive },
-              { label: t("disc.level.2"), level: result.natural },
-              { label: t("disc.level.3"), level: result.pressure },
-              { label: t("disc.level.4"), level: result.motivatorFear },
-              ...(result.managerValidation
-                ? [{ label: t("disc.level.5"), level: result.managerValidation }]
-                : []),
-            ] as const
-          ).map(({ label, level }) => {
-            const pct = level?.percentage;
-            const dominantLetters = new Set(
-              (level?.dominantProfile ?? "")
-                .toUpperCase()
-                .split("")
-                .filter((ch): ch is "D" | "I" | "S" | "C" =>
-                  ch === "D" || ch === "I" || ch === "S" || ch === "C",
-                ),
-            );
-            // Fallback: highlight max percentage group(s) when profile is missing
-            if (dominantLetters.size === 0 && pct) {
-              const max = Math.max(pct.D, pct.I, pct.S, pct.C);
-              for (const k of ["D", "I", "S", "C"] as const) {
-                if (pct[k] === max) dominantLetters.add(k);
-              }
-            }
-            const primary =
-              ([...dominantLetters][0] as "D" | "I" | "S" | "C" | undefined) ?? null;
-
-            return (
-              <Card
-                key={label}
-                className={cn(
-                  "overflow-hidden",
-                  primary && "border-l-4",
-                )}
-                style={
-                  primary
-                    ? { borderLeftColor: `var(--disc-${primary.toLowerCase()})` }
-                    : undefined
-                }
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{label}</CardTitle>
-                  <CardDescription className="flex items-center gap-2">
-                    {primary ? <DiscBadge type={primary} /> : null}
-                    <span className="font-semibold text-foreground">
-                      {level?.dominantProfile ?? "—"}
-                    </span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-1.5">
-                  {(["D", "I", "S", "C"] as const).map((k) => {
-                    const isDominant = dominantLetters.has(k);
-                    const value = pct?.[k] ?? 0;
-                    return (
-                      <Badge
-                        key={k}
-                        variant="outline"
-                        className={cn(
-                          "tabular-nums border transition-colors",
-                          isDominant
-                            ? "border-transparent text-white shadow-sm"
-                            : "text-muted-foreground opacity-70",
-                        )}
-                        style={
-                          isDominant
-                            ? { background: `var(--disc-${k.toLowerCase()})` }
-                            : undefined
-                        }
-                      >
-                        {k} {value}%
-                      </Badge>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Narrative copy still from mock until content API exists */}
         <Card>
           <CardHeader>
-            <CardTitle>Behavior summary</CardTitle>
-            <CardDescription>Reference narrative for {discFullName[dominant]}</CardDescription>
+            <CardTitle>Phương pháp tính điểm</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm leading-relaxed text-muted-foreground max-w-3xl">
-              {discProfile.summary}
+              Điểm mỗi nhóm D/I/S/C được tính từ 12 câu chính trên thang Likert 1–5 (phạm vi 12–60).
+              Phần trăm được chuẩn hóa: ((điểm thô − 12) / 48) × 100. 12 câu đảo chỉ dùng để đo độ
+              nhất quán, không cộng vào điểm nhóm. Báo cáo không kết luận nhóm DISC ưu thế.
             </p>
           </CardContent>
         </Card>

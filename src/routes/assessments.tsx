@@ -191,8 +191,7 @@ function AssessmentsPage() {
             const canTake =
               a.status === "OPEN" &&
               (!a.myParticipant ||
-                (a.myParticipant.status !== "SUBMITTED" &&
-                  a.myParticipant.status !== "VERIFIED"));
+                (a.myParticipant.status !== "SUBMITTED" && a.myParticipant.status !== "VERIFIED"));
             // Only show Result when the invitee has a scored status (list API has no result field).
             // INVITED / IN_PROGRESS — even on CLOSED sessions — means no result yet.
             const canViewResult =
@@ -425,7 +424,6 @@ function AssessmentsPage() {
                 </div>
                 <div className="max-h-56 space-y-2 overflow-y-auto text-sm">
                   {overviewQuery.data.participants.map((participant) => {
-                    const canVerify = participant.status === "SUBMITTED";
                     const canViewResult =
                       Boolean(participant.result) ||
                       participant.status === "SUBMITTED" ||
@@ -444,19 +442,6 @@ function AssessmentsPage() {
                           <Badge variant="outline">
                             {t(participantStatusMessageKey(participant.status))}
                           </Badge>
-                          {canVerify && (
-                            <Button variant="outline" size="sm" asChild>
-                              <Link
-                                to="/assessments/verify"
-                                search={{
-                                  sessionId: overviewQuery.data.id,
-                                  participantId: participant.id,
-                                }}
-                              >
-                                {t("common.verify")}
-                              </Link>
-                            </Button>
-                          )}
                           {canViewResult && (
                             <Button variant="ghost" size="sm" asChild>
                               <Link
@@ -481,8 +466,7 @@ function AssessmentsPage() {
                 const myRow = overviewQuery.data.participants.find((p) => p.user.id === user?.id);
                 const canTakeSelf =
                   overviewQuery.data.status === "OPEN" &&
-                  (!myRow ||
-                    (myRow.status !== "SUBMITTED" && myRow.status !== "VERIFIED"));
+                  (!myRow || (myRow.status !== "SUBMITTED" && myRow.status !== "VERIFIED"));
                 const canManage = canManageStatus(overviewQuery.data);
                 if (!canTakeSelf && !canManage) return null;
                 return (

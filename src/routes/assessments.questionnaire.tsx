@@ -16,11 +16,7 @@ import {
   submitAssessment,
   type DiscQuestion,
 } from "@/lib/api/disc";
-import {
-  discLevelMessageKey,
-  useT,
-} from "@/lib/i18n";
-import { messages } from "@/lib/i18n/messages";
+import { useT } from "@/lib/i18n";
 
 const searchSchema = z.object({
   sessionId: z.string().uuid().optional(),
@@ -37,10 +33,7 @@ export const Route = createFileRoute("/assessments/questionnaire")({
   component: QuestionnairePage,
 });
 
-function answersPayload(
-  answers: Record<string, string>,
-  allowedQuestionIds?: Set<string>,
-) {
+function answersPayload(answers: Record<string, string>, allowedQuestionIds?: Set<string>) {
   return {
     answers: Object.entries(answers)
       .filter(([questionId, optionId]) => {
@@ -55,30 +48,11 @@ function answersPayload(
   };
 }
 
-function groupQuestionsBySection(
-  questions: DiscQuestion[],
-  labelForLevel: (level: number) => string,
-) {
-  const map = new Map<number, DiscQuestion[]>();
-  for (const q of questions) {
-    const list = map.get(q.level) ?? [];
-    list.push(q);
-    map.set(q.level, list);
-  }
-  const levels = [...map.keys()].sort((a, b) => a - b);
-  return levels.map((level) => ({
-    level,
-    label: labelForLevel(level),
-    questions: map.get(level) ?? [],
-  }));
-}
-
 function QuestionnairePage() {
   const { sessionId } = Route.useSearch();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const t = useT();
   const queryClient = useQueryClient();
-  const [sectionIndex, setSectionIndex] = useState(0);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
@@ -92,7 +66,6 @@ function QuestionnairePage() {
     queryKey: ["disc", "assessment", sessionId],
     queryFn: () => getAssessment(sessionId!),
     enabled: Boolean(isAuthenticated && sessionId),
-    // Always re-fetch when opening the page so draft from API is not stuck behind cache.
     refetchOnMount: "always",
   });
 
@@ -102,21 +75,13 @@ function QuestionnairePage() {
     enabled: Boolean(isAuthenticated && sessionId),
   });
 
-  const sections = useMemo(
-    () =>
-      groupQuestionsBySection(assessmentQuery.data?.questions ?? [], (level) => {
-        const key = discLevelMessageKey(level);
-        return key in messages.en ? t(key) : t("disc.sectionFallback", { level });
-      }),
-    [assessmentQuery.data?.questions, t],
-  );
-
-  const questionIds = useMemo(
-    () => new Set((assessmentQuery.data?.questions ?? []).map((q) => q.id)),
+  const questions: DiscQuestion[] = useMemo(
+    () => assessmentQuery.data?.questions ?? [],
     [assessmentQuery.data?.questions],
   );
 
-  // Reset local state when switching sessions
+  const questionIds = useMemo(() => new Set(questions.map((q) => q.id)), [questions]);
+
   useEffect(() => {
     setAnswers({});
     setDraftDirty(false);
@@ -124,12 +89,10 @@ function QuestionnairePage() {
     setDraftSavedAt(null);
     setDraftSavedCount(0);
     setActionError(null);
-    setSectionIndex(0);
     setQuestionIndex(0);
     syncedAnswersKeyRef.current = null;
   }, [sessionId]);
 
-  // Sync answers from API whenever server data changes and local edits are not dirty.
   useEffect(() => {
     if (!assessmentQuery.data || draftDirty) return;
 
@@ -151,27 +114,9 @@ function QuestionnairePage() {
       setDraftSavedAt(new Date());
     }
 
-    const grouped = groupQuestionsBySection(
-      assessmentQuery.data.questions,
-      (level) => String(level),
-    );
-    let startSection = 0;
-    let startQuestion = 0;
-    for (let s = 0; s < grouped.length; s++) {
-      const unanswered = grouped[s].questions.findIndex((q) => !draft[q.id]);
-      if (unanswered >= 0) {
-        startSection = s;
-        startQuestion = unanswered;
-        break;
-      }
-      if (s === grouped.length - 1) {
-        startSection = s;
-        startQuestion = Math.max(0, grouped[s].questions.length - 1);
-      }
-    }
-    setSectionIndex(startSection);
-    setQuestionIndex(startQuestion);
-  }, [assessmentQuery.data, draftDirty, sessionId]);
+    const firstUnanswered = questions.findIndex((q) => !draft[q.id]);
+    setQuestionIndex(firstUnanswered >= 0 ? firstUnanswered : Math.max(0, questions.length - 1));
+  }, [assessmentQuery.data, draftDirty, sessionId, questions]);
 
   const status = assessmentQuery.data?.status;
   const alreadySubmitted = status === "SUBMITTED" || status === "VERIFIED";
@@ -183,7 +128,6 @@ function QuestionnairePage() {
       const savedCount =
         typeof result?.answerCount === "number" ? result.answerCount : payload.answers.length;
 
-      // Keep React Query cache in sync so leaving/re-entering does not restore stale answers.
       queryClient.setQueryData(
         ["disc", "assessment", sessionId],
         (prev: Awaited<ReturnType<typeof getAssessment>> | undefined) => {
@@ -213,7 +157,9 @@ function QuestionnairePage() {
     },
     onError: (err) => {
       setActionError(
-        err instanceof ApiError || err instanceof Error ? err.message : t("questionnaire.saveDraftFailed"),
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : t("questionnaire.saveDraftFailed"),
       );
     },
   });
@@ -240,9 +186,8 @@ function QuestionnairePage() {
   });
 
   const allAnswered = useMemo(() => {
-    const questions = assessmentQuery.data?.questions ?? [];
     return questions.length > 0 && questions.every((q) => Boolean(answers[q.id]));
-  }, [assessmentQuery.data?.questions, answers]);
+  }, [questions, answers]);
 
   if (!sessionId) {
     return (
@@ -312,11 +257,7 @@ function QuestionnairePage() {
     return (
       <CenteredMessage
         title={t("questionnaire.alreadySubmitted")}
-        body={
-          status === "VERIFIED"
-            ? t("questionnaire.alreadyVerifiedBody")
-            : t("questionnaire.waitingVerifyBody")
-        }
+        body={t("questionnaire.alreadySubmittedBody")}
         action={
           <div className="flex gap-2 justify-center">
             {assessmentQuery.data?.participantId && (
@@ -338,9 +279,9 @@ function QuestionnairePage() {
     );
   }
 
-  const total = assessmentQuery.data?.questions.length ?? 0;
+  const total = questions.length;
 
-  if (total === 0 || sections.length === 0) {
+  if (total === 0) {
     return (
       <CenteredMessage
         title={t("questionnaire.noQuestions")}
@@ -354,24 +295,15 @@ function QuestionnairePage() {
     );
   }
 
-  const safeSectionIndex = Math.min(sectionIndex, sections.length - 1);
-  const currentSection = sections[safeSectionIndex];
-  const sectionQuestions = currentSection.questions;
-  const safeQuestionIndex = Math.min(questionIndex, Math.max(0, sectionQuestions.length - 1));
-  const q = sectionQuestions[safeQuestionIndex];
-  const sectionAnswered = sectionQuestions.filter((question) => answers[question.id]).length;
-  const sectionComplete =
-    sectionQuestions.length > 0 && sectionQuestions.every((question) => Boolean(answers[question.id]));
-  const answeredCount = (assessmentQuery.data?.questions ?? []).filter(
-    (question) => answers[question.id],
-  ).length;
+  const safeIndex = Math.min(questionIndex, total - 1);
+  const q = questions[safeIndex];
+  const answeredCount = questions.filter((question) => answers[question.id]).length;
   const pct = Math.round((answeredCount / total) * 100);
   const remaining = total - answeredCount;
   const remainingMinutes = Math.max(1, Math.ceil(remaining * 0.4));
   const title = sessionQuery.data?.title ?? "DISC Assessment";
   const isBusy = draftMutation.isPending || submitMutation.isPending;
-  const isLastSection = safeSectionIndex === sections.length - 1;
-  const isLastQuestionInSection = safeQuestionIndex === sectionQuestions.length - 1;
+  const isLast = safeIndex === total - 1;
 
   const selectAnswer = (optionId: string) => {
     setAnswers((prev) => ({ ...prev, [q.id]: optionId }));
@@ -379,42 +311,12 @@ function QuestionnairePage() {
   };
 
   const goPrev = () => {
-    if (safeQuestionIndex > 0) {
-      setQuestionIndex(safeQuestionIndex - 1);
-      return;
-    }
-    if (safeSectionIndex > 0) {
-      const prevSection = sections[safeSectionIndex - 1];
-      setSectionIndex(safeSectionIndex - 1);
-      setQuestionIndex(Math.max(0, prevSection.questions.length - 1));
-    }
+    if (safeIndex > 0) setQuestionIndex(safeIndex - 1);
   };
 
   const goNext = () => {
     if (!answers[q.id]) return;
-    if (!isLastQuestionInSection) {
-      setQuestionIndex(safeQuestionIndex + 1);
-      return;
-    }
-    if (!isLastSection && sectionComplete) {
-      setSectionIndex(safeSectionIndex + 1);
-      setQuestionIndex(0);
-    }
-  };
-
-  const jumpToSection = (index: number) => {
-    if (index === safeSectionIndex) return;
-    // Allow going back freely; forward only if prior sections are complete
-    if (index > safeSectionIndex) {
-      for (let s = 0; s < index; s++) {
-        const complete = sections[s].questions.every((question) => Boolean(answers[question.id]));
-        if (!complete) return;
-      }
-    }
-    setSectionIndex(index);
-    const target = sections[index];
-    const firstUnanswered = target.questions.findIndex((question) => !answers[question.id]);
-    setQuestionIndex(firstUnanswered >= 0 ? firstUnanswered : 0);
+    if (safeIndex < total - 1) setQuestionIndex(safeIndex + 1);
   };
 
   if (done) {
@@ -474,11 +376,7 @@ function QuestionnairePage() {
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">{title}</div>
               <div className="truncate text-xs text-muted-foreground">
-                {t("questionnaire.meta", {
-                  section: currentSection.label,
-                  sections: sections.length,
-                  total,
-                })}
+                {total} questions · Likert scale
               </div>
             </div>
           </div>
@@ -527,76 +425,17 @@ function QuestionnairePage() {
 
         <div className="mx-auto max-w-3xl px-4 sm:px-6 pb-3 pt-2 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {t("questionnaire.progressHint", {
-                section: currentSection.label,
-                current: safeQuestionIndex + 1,
-                sectionTotal: sectionQuestions.length,
-              })}
-              <span className="mx-1.5 text-border">·</span>
-              {t("questionnaire.overall", { answered: answeredCount, total })}
-            </span>
+            <span>{t("questionnaire.overall", { answered: answeredCount, total })}</span>
             <span className="font-medium tabular-nums text-foreground">{pct}%</span>
           </div>
-
-          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${sections.length}, minmax(0, 1fr))` }}>
-            {sections.map((section, idx) => {
-              const answeredInSection = section.questions.filter((question) =>
-                Boolean(answers[question.id]),
-              ).length;
-              const sectionPct =
-                section.questions.length > 0
-                  ? Math.round((answeredInSection / section.questions.length) * 100)
-                  : 0;
-              const doneSection = answeredInSection === section.questions.length && section.questions.length > 0;
-              const active = idx === safeSectionIndex;
-              const reachable =
-                idx <= safeSectionIndex ||
-                sections
-                  .slice(0, idx)
-                  .every((s) => s.questions.every((question) => Boolean(answers[question.id])));
-
-              return (
-                <button
-                  key={section.level}
-                  type="button"
-                  disabled={!reachable || isBusy}
-                  onClick={() => jumpToSection(idx)}
-                  className={cn(
-                    "group min-w-0 text-left transition-opacity",
-                    !reachable && "opacity-50 cursor-not-allowed",
-                  )}
-                  title={`${section.label}: ${answeredInSection}/${section.questions.length}`}
-                >
-                  <div
-                    className={cn(
-                      "h-2 overflow-hidden rounded-full bg-muted",
-                      active && "ring-2 ring-primary/30 ring-offset-1 ring-offset-background",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-[width] duration-300",
-                        doneSection ? "bg-[var(--success)]" : "bg-primary",
-                      )}
-                      style={{ width: `${sectionPct}%` }}
-                    />
-                  </div>
-                  <div
-                    className={cn(
-                      "mt-1.5 truncate text-[10px] font-medium sm:text-xs",
-                      active
-                        ? "text-primary"
-                        : doneSection
-                          ? "text-[var(--success)]"
-                          : "text-muted-foreground",
-                    )}
-                  >
-                    {section.label}
-                  </div>
-                </button>
-              );
-            })}
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-300",
+                pct === 100 ? "bg-[var(--success)]" : "bg-primary",
+              )}
+              style={{ width: `${pct}%` }}
+            />
           </div>
         </div>
       </header>
@@ -604,11 +443,7 @@ function QuestionnairePage() {
       <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8 sm:py-14">
         <Card className="p-6 sm:p-10 animate-fade-in" key={q.id}>
           <div className="text-xs font-medium uppercase tracking-widest text-primary">
-            {t("questionnaire.questionLabel", {
-              section: currentSection.label,
-              current: String(safeQuestionIndex + 1).padStart(2, "0"),
-              sectionTotal: String(sectionQuestions.length).padStart(2, "0"),
-            })}
+            Question {String(safeIndex + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}
           </div>
           <h2 className="mt-4 text-xl sm:text-2xl font-semibold leading-snug tracking-tight">
             {q.question}
@@ -655,11 +490,7 @@ function QuestionnairePage() {
         )}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-          <Button
-            variant="outline"
-            onClick={goPrev}
-            disabled={(safeSectionIndex === 0 && safeQuestionIndex === 0) || isBusy}
-          >
+          <Button variant="outline" onClick={goPrev} disabled={safeIndex === 0 || isBusy}>
             <ArrowLeft className="h-4 w-4" /> {t("common.previous")}
           </Button>
           <div className="flex flex-wrap items-center gap-2">
@@ -675,11 +506,9 @@ function QuestionnairePage() {
               )}
               {t("common.saveDraft")}
             </Button>
-            {isLastSection && isLastQuestionInSection ? (
+            {isLast ? (
               <Button
-                onClick={() =>
-                  submitMutation.mutate(answersPayload(answers, questionIds))
-                }
+                onClick={() => submitMutation.mutate(answersPayload(answers, questionIds))}
                 disabled={!allAnswered || isBusy}
               >
                 {submitMutation.isPending ? (
@@ -690,15 +519,8 @@ function QuestionnairePage() {
                 {t("questionnaire.submitAssessment")}
               </Button>
             ) : (
-              <Button
-                onClick={goNext}
-                disabled={
-                  !answers[q.id] ||
-                  isBusy ||
-                  (isLastQuestionInSection && !sectionComplete)
-                }
-              >
-                {isLastQuestionInSection ? t("common.nextSection") : t("common.next")}
+              <Button onClick={goNext} disabled={!answers[q.id] || isBusy}>
+                {t("common.next")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             )}
@@ -706,10 +528,7 @@ function QuestionnairePage() {
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          {t("questionnaire.sectionProgress", {
-            answered: sectionAnswered,
-            total: sectionQuestions.length,
-          })}
+          {answeredCount}/{total} answered
           {draftSavedCount > 0
             ? ` · ${t("questionnaire.savedRatio", { saved: draftSavedCount, total })}`
             : ""}

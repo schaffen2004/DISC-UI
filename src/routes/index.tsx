@@ -45,8 +45,9 @@ import {
   getSessionOverview,
   listSessions,
   filterSessionsForRole,
-  primaryDiscType,
+  topDimension,
   type DiscHistoryItem,
+  type DiscScoreResult,
   type DiscSessionListItem,
 } from "@/lib/api/disc";
 import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
@@ -116,10 +117,10 @@ function buildStatusDistribution(sessions: DiscSessionListItem[]) {
   ].filter((d) => d.value > 0);
 }
 
-function buildDiscDistribution(profiles: Array<string | null | undefined>) {
+function buildDiscDistribution(results: Array<DiscScoreResult | null | undefined>) {
   const counts = { D: 0, I: 0, S: 0, C: 0 };
-  for (const profile of profiles) {
-    const t = primaryDiscType(profile);
+  for (const r of results) {
+    const t = topDimension(r);
     if (t) counts[t] += 1;
   }
   const total = counts.D + counts.I + counts.S + counts.C;
@@ -176,14 +177,14 @@ function useDiscDashboard() {
     })),
   });
 
-  const teamDiscProfiles = useMemo(() => {
-    const profiles: string[] = [];
+  const teamDiscResults = useMemo(() => {
+    const results: (DiscScoreResult | null)[] = [];
     for (const q of overviewQueries) {
       for (const p of q.data?.participants ?? []) {
-        if (p.result?.dominantProfile) profiles.push(p.result.dominantProfile);
+        if (p.result) results.push(p.result);
       }
     }
-    return profiles;
+    return results;
   }, [overviewQueries]);
 
   return {
@@ -192,7 +193,7 @@ function useDiscDashboard() {
     sessions,
     history: historyQuery.data ?? [],
     isLoading: isAuthenticated && (sessionsQuery.isLoading || historyQuery.isLoading),
-    teamDiscProfiles,
+    teamDiscResults,
     overviewsLoading: overviewQueries.some((q) => q.isLoading),
   };
 }
@@ -214,12 +215,7 @@ function HomeDashboard() {
 
 type DashboardData = ReturnType<typeof useDiscDashboard>;
 
-function EmployeeDashboard({
-  isAuthenticated,
-  sessions,
-  history,
-  isLoading,
-}: DashboardData) {
+function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: DashboardData) {
   const { displayName } = useAuth();
   const t = useT();
   const firstName = displayName.split(/\s+/)[0] || "there";
@@ -235,8 +231,7 @@ function EmployeeDashboard({
   );
   const pending = mySessions.filter(
     (s) =>
-      (s.status === "OPEN" && !s.myParticipant) ||
-      isPendingParticipant(s.myParticipant?.status),
+      (s.status === "OPEN" && !s.myParticipant) || isPendingParticipant(s.myParticipant?.status),
   );
   const completed = mySessions.filter((s) => isDoneParticipant(s.myParticipant?.status));
   const withResult = history.filter((h) => h.result);
@@ -260,19 +255,16 @@ function EmployeeDashboard({
   }, [mySessions]);
 
   const scoreBars = useMemo(() => {
-    const pct =
-      latestResult?.result?.natural?.percentage ??
-      latestResult?.result?.adaptive?.percentage ??
-      null;
-    if (!pct) return [];
+    const r = latestResult?.result;
+    if (!r) return [];
     return (["D", "I", "S", "C"] as const).map((type) => ({
       type,
-      value: Math.round(pct[type] ?? 0),
+      value: Math.round(r[`${type}_percent`] ?? 0),
       color: `var(--disc-${type.toLowerCase()})`,
     }));
   }, [latestResult]);
 
-  const dominant = primaryDiscType(latestResult?.result?.dominantProfile);
+  const dominant = topDimension(latestResult?.result);
 
   return (
     <div className="space-y-6">
@@ -318,14 +310,9 @@ function EmployeeDashboard({
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Button asChild>
-                    <Link
-                      to="/assessments/questionnaire"
-                      search={{ sessionId: activePending.id }}
-                    >
+                    <Link to="/assessments/questionnaire" search={{ sessionId: activePending.id }}>
                       <PlayCircle className="h-4 w-4" />
-                      {activePending.myParticipant
-                        ? "Continue assessment"
-                        : "Take assessment"}
+                      {activePending.myParticipant ? "Continue assessment" : "Take assessment"}
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -351,12 +338,7 @@ function EmployeeDashboard({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Assigned to me" value={mySessions.length} icon={Users} accent="primary" />
         <StatCard label="Pending" value={pending.length} icon={Clock} accent="warning" />
-        <StatCard
-          label="Completed"
-          value={completed.length}
-          icon={CheckCircle2}
-          accent="success"
-        />
+        <StatCard label="Completed" value={completed.length} icon={CheckCircle2} accent="success" />
         <StatCard label="My results" value={withResult.length} icon={FileText} accent="primary" />
       </div>
 
@@ -386,7 +368,11 @@ function EmployeeDashboard({
                 <div className="h-[220px]">
                   <ResponsiveContainer>
                     <BarChart data={scoreBars} margin={{ left: -20, right: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                        vertical={false}
+                      />
                       <XAxis
                         dataKey="type"
                         tickLine={false}
@@ -493,7 +479,9 @@ function EmployeeDashboard({
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">My assessments</div>
-              <div className="text-xs text-muted-foreground">View and complete assigned sessions</div>
+              <div className="text-xs text-muted-foreground">
+                View and complete assigned sessions
+              </div>
             </div>
             <ArrowRight className="h-4 w-4 text-muted-foreground" />
           </Link>
@@ -555,7 +543,7 @@ function StaffDashboard({
   sessions,
   history,
   isLoading,
-  teamDiscProfiles,
+  teamDiscResults,
   overviewsLoading,
 }: DashboardData) {
   const { displayName } = useAuth();
@@ -571,7 +559,7 @@ function StaffDashboard({
 
   const sessionTrend = useMemo(() => buildSessionTrend(sessions), [sessions]);
   const statusPie = useMemo(() => buildStatusDistribution(sessions), [sessions]);
-  const discPie = useMemo(() => buildDiscDistribution(teamDiscProfiles), [teamDiscProfiles]);
+  const discPie = useMemo(() => buildDiscDistribution(teamDiscResults), [teamDiscResults]);
   const hasDiscData = discPie.some((d) => d.count > 0);
 
   return (
@@ -647,7 +635,9 @@ function StaffDashboard({
           </CardHeader>
           <CardContent>
             {sessions.length === 0 ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">No session data yet.</p>
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                No session data yet.
+              </p>
             ) : (
               <div className="h-[260px] w-full">
                 <ResponsiveContainer>
@@ -764,7 +754,9 @@ function StaffDashboard({
           </CardHeader>
           <CardContent>
             {sessions.length === 0 ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">No participant data yet.</p>
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                No participant data yet.
+              </p>
             ) : (
               <div className="h-[220px]">
                 <ResponsiveContainer>
@@ -981,9 +973,7 @@ function StaffDashboard({
 function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
   const t = useT();
   const status = session.myParticipant?.status;
-  const canTake =
-    session.status === "OPEN" &&
-    (!status || isPendingParticipant(status));
+  const canTake = session.status === "OPEN" && (!status || isPendingParticipant(status));
   return (
     <div className="flex items-center gap-3 rounded-lg border p-3">
       <Avatar className="h-8 w-8">
@@ -994,8 +984,10 @@ function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{session.title}</div>
         <div className="text-xs text-muted-foreground">
-          {status ? t(participantStatusMessageKey(status)) : t(sessionStatusMessageKey(session.status))} ·{" "}
-          {new Date(session.createdAt).toLocaleDateString()}
+          {status
+            ? t(participantStatusMessageKey(status))
+            : t(sessionStatusMessageKey(session.status))}{" "}
+          · {new Date(session.createdAt).toLocaleDateString()}
         </div>
       </div>
       {canTake ? (
@@ -1040,9 +1032,17 @@ function SessionActivityRow({ session }: { session: DiscSessionListItem }) {
 }
 
 function LatestReportRow({ item }: { item: DiscHistoryItem }) {
-  const disc = primaryDiscType(item.result?.dominantProfile);
-  const pct = item.result?.natural?.percentage;
-  const score = pct ? Math.max(pct.D, pct.I, pct.S, pct.C) : null;
+  const disc = topDimension(item.result);
+  const score = item.result
+    ? Math.round(
+        Math.max(
+          item.result.D_percent,
+          item.result.I_percent,
+          item.result.S_percent,
+          item.result.C_percent,
+        ),
+      )
+    : null;
   return (
     <Link
       to="/assessments/result"
@@ -1057,9 +1057,7 @@ function LatestReportRow({ item }: { item: DiscHistoryItem }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{item.session.title}</div>
         <div className="text-xs text-muted-foreground">
-          {item.result?.calculatedAt
-            ? new Date(item.result.calculatedAt).toLocaleDateString()
-            : "—"}
+          {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString() : "—"}
         </div>
       </div>
       {disc && <DiscBadge type={disc} />}

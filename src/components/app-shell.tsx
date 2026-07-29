@@ -29,7 +29,6 @@ const CRUMB_KEYS: Record<string, MessageKey> = {
   new: "nav.new",
   result: "nav.result",
   questionnaire: "nav.questionnaire",
-  verify: "nav.verify",
 };
 
 function useDarkMode() {
