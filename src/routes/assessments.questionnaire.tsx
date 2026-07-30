@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Loader2, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Loader2, Save, Sparkles } from "lucide-react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -54,14 +54,18 @@ function QuestionnairePage() {
   const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const [draftSavedCount, setDraftSavedCount] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [draftDirty, setDraftDirty] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const syncedAnswersKeyRef = useRef<string | null>(null);
+  const questionRefs = useRef<Array<HTMLElement | null>>([]);
+  const skipObserverRef = useRef(false);
+  const hasPointedQuestionRef = useRef(false);
 
   const assessmentQuery = useQuery({
     queryKey: ["disc", "assessment", sessionId],
@@ -90,8 +94,10 @@ function QuestionnairePage() {
     setDraftSavedAt(null);
     setDraftSavedCount(0);
     setActionError(null);
-    setQuestionIndex(0);
+    setCurrentIndex(0);
+    setSubmitAttempted(false);
     syncedAnswersKeyRef.current = null;
+    hasPointedQuestionRef.current = false;
   }, [sessionId]);
 
   useEffect(() => {
@@ -116,8 +122,51 @@ function QuestionnairePage() {
     }
 
     const firstUnanswered = questions.findIndex((q) => !draft[q.id]);
-    setQuestionIndex(firstUnanswered >= 0 ? firstUnanswered : Math.max(0, questions.length - 1));
+    const nextIndex = firstUnanswered >= 0 ? firstUnanswered : Math.max(0, questions.length - 1);
+    setCurrentIndex(nextIndex);
   }, [assessmentQuery.data, draftDirty, sessionId, questions]);
+
+  useEffect(() => {
+    if (questions.length === 0) return;
+
+    let frameId: number | null = null;
+    const updateCurrentQuestion = () => {
+      frameId = null;
+      if (skipObserverRef.current || hasPointedQuestionRef.current) return;
+
+      const viewportAnchor = Math.max(160, window.innerHeight * 0.4);
+      let closestIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+
+      questionRefs.current.forEach((el, index) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const distance = Math.abs(rect.top + rect.height / 2 - viewportAnchor);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      setCurrentIndex(closestIndex);
+    };
+
+    const scheduleUpdate = () => {
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(updateCurrentQuestion);
+      }
+    };
+
+    scheduleUpdate();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
+  }, [questions]);
 
   const status = assessmentQuery.data?.status;
   const alreadySubmitted = status === "SUBMITTED" || status === "VERIFIED";
@@ -331,28 +380,40 @@ function QuestionnairePage() {
     );
   }
 
-  const safeIndex = Math.min(questionIndex, total - 1);
-  const q = questions[safeIndex];
   const answeredCount = questions.filter((question) => answers[question.id]).length;
   const pct = Math.round((answeredCount / total) * 100);
   const remaining = total - answeredCount;
   const remainingMinutes = Math.max(1, Math.ceil(remaining * 0.4));
   const title = sessionQuery.data?.title ?? "DISC Assessment";
   const isBusy = draftMutation.isPending || submitMutation.isPending;
-  const isLast = safeIndex === total - 1;
 
-  const selectAnswer = (optionId: string) => {
-    setAnswers((prev) => ({ ...prev, [q.id]: optionId }));
+  const selectAnswer = (questionId: string, optionId: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: optionId }));
     setDraftDirty(true);
+    setSubmitAttempted(false);
+    const index = questions.findIndex((q) => q.id === questionId);
+    if (index >= 0) setCurrentIndex(index);
   };
 
-  const goPrev = () => {
-    if (safeIndex > 0) setQuestionIndex(safeIndex - 1);
+  const jumpToQuestion = (index: number) => {
+    const el = questionRefs.current[index];
+    if (!el) return;
+    skipObserverRef.current = true;
+    setCurrentIndex(index);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      skipObserverRef.current = false;
+    }, 500);
   };
 
-  const goNext = () => {
-    if (!answers[q.id]) return;
-    if (safeIndex < total - 1) setQuestionIndex(safeIndex + 1);
+  const handleSubmit = () => {
+    setSubmitAttempted(true);
+    const firstUnanswered = questions.findIndex((q) => !answers[q.id]);
+    if (firstUnanswered >= 0) {
+      jumpToQuestion(firstUnanswered);
+      return;
+    }
+    submitMutation.mutate(answersPayload(answers, questionIds));
   };
 
   if (done) {
@@ -388,8 +449,8 @@ function QuestionnairePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      <header className="border-b bg-background/70 backdrop-blur sticky top-0 z-10">
-        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
+      <header className="border-b bg-background/70 backdrop-blur sticky top-0 z-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
           <Button variant="ghost" size="sm" className="shrink-0 -ml-2" asChild>
             <Link
               to="/assessments"
@@ -412,7 +473,7 @@ function QuestionnairePage() {
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">{title}</div>
               <div className="truncate text-xs text-muted-foreground">
-                {total} questions · Likert scale
+                {t("questionnaire.likertScale", { total })}
               </div>
             </div>
           </div>
@@ -453,13 +514,13 @@ function QuestionnairePage() {
 
         {draftDirty && (
           <div className="border-t border-[var(--warning)]/25 bg-[var(--warning)]/10">
-            <p className="mx-auto max-w-3xl px-4 sm:px-6 py-2 text-xs sm:text-sm text-[var(--warning)]">
+            <p className="mx-auto max-w-6xl px-4 sm:px-6 py-2 text-xs sm:text-sm text-[var(--warning)]">
               {t("questionnaire.unsavedNotice")}
             </p>
           </div>
         )}
 
-        <div className="mx-auto max-w-3xl px-4 sm:px-6 pb-3 pt-2 space-y-2">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 pb-3 pt-2 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>{t("questionnaire.overall", { answered: answeredCount, total })}</span>
             <span className="font-medium tabular-nums text-foreground">{pct}%</span>
@@ -476,100 +537,207 @@ function QuestionnairePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8 sm:py-14">
-        <Card className="p-6 sm:p-10 animate-fade-in" key={q.id}>
-          <div className="text-xs font-medium uppercase tracking-widest text-primary">
-            Question {String(safeIndex + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}
-          </div>
-          <h2 className="mt-4 text-xl sm:text-2xl font-semibold leading-snug tracking-tight">
-            {q.question}
-          </h2>
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start">
+          <aside className="lg:col-start-2 lg:row-start-1 lg:sticky lg:top-36">
+            <Card className="p-4">
+              <div className="text-sm font-medium">{t("questionnaire.questionMap")}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("questionnaire.questionMapHint")}
+              </p>
 
-          <div className="mt-8 grid gap-2.5">
-            {q.options
-              .slice()
-              .sort((a, b) => a.ordinal - b.ordinal)
-              .map((o) => {
-                const active = answers[q.id] === o.id;
-                return (
-                  <button
-                    key={o.id}
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => selectAnswer(o.id)}
+              <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-[var(--success)]" />
+                  {t("questionnaire.answered")}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-primary" />
+                  {t("questionnaire.current")}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
                     className={cn(
-                      "group flex items-center justify-between gap-4 rounded-xl border p-4 text-left text-sm transition-all",
-                      active
-                        ? "border-primary bg-primary/5 shadow-sm"
-                        : "hover:border-primary/50 hover:bg-muted/40",
+                      "h-2.5 w-2.5 rounded-sm border",
+                      submitAttempted
+                        ? "border-destructive bg-destructive"
+                        : "border-border bg-muted",
                     )}
-                  >
-                    <span className="font-medium">{o.value}</span>
-                    <span
+                  />
+                  {t("questionnaire.unanswered")}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-8 gap-1.5 sm:grid-cols-10 lg:grid-cols-5">
+                {questions.map((q, index) => {
+                  const answered = Boolean(answers[q.id]);
+                  const current = index === currentIndex;
+                  const needsAnswer = submitAttempted && !answered;
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      title={t("questionnaire.jumpTo", { n: index + 1 })}
+                      aria-label={t("questionnaire.jumpTo", { n: index + 1 })}
+                      aria-current={current ? "true" : undefined}
+                      onClick={() => jumpToQuestion(index)}
                       className={cn(
-                        "grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors",
-                        active ? "border-primary bg-primary" : "border-border",
+                        "grid h-8 place-items-center rounded-md text-xs font-medium tabular-nums transition-colors",
+                        answered &&
+                          !current &&
+                          "bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/25",
+                        current && !needsAnswer && "bg-primary text-primary-foreground shadow-sm",
+                        !answered && !current && "bg-muted text-muted-foreground hover:bg-muted/80",
+                        needsAnswer &&
+                          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
                       )}
                     >
-                      {active && <span className="h-2 w-2 rounded-full bg-primary-foreground" />}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
-        </Card>
+                      {index + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          </aside>
 
-        {actionError && (
-          <Card className="mt-4 border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            {actionError}
-          </Card>
-        )}
+          <div className="space-y-4 lg:col-start-1 lg:row-start-1">
+            {questions.map((q, index) => {
+              const isCurrent = index === currentIndex;
+              const isAnswered = Boolean(answers[q.id]);
+              const needsAnswer = submitAttempted && !isAnswered;
+              return (
+                <Card
+                  key={q.id}
+                  ref={(el) => {
+                    questionRefs.current[index] = el;
+                  }}
+                  data-question-id={q.id}
+                  onMouseEnter={() => {
+                    hasPointedQuestionRef.current = true;
+                    setCurrentIndex(index);
+                  }}
+                  onFocusCapture={() => setCurrentIndex(index)}
+                  className={cn(
+                    "scroll-mt-36 p-5 sm:p-7 transition-shadow",
+                    isCurrent && !needsAnswer && "ring-2 ring-primary/40 shadow-md",
+                    isAnswered && !isCurrent && "border-[var(--success)]/30",
+                    needsAnswer && "border-destructive ring-2 ring-destructive/40",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-medium uppercase tracking-widest text-primary">
+                      {t("questionnaire.questionN", { n: String(index + 1).padStart(2, "0") })}
+                    </div>
+                    {isAnswered ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--success)]">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {t("questionnaire.answered")}
+                      </span>
+                    ) : needsAnswer ? (
+                      <span className="text-xs font-medium text-destructive">
+                        {t("questionnaire.unanswered")}
+                      </span>
+                    ) : isCurrent ? (
+                      <span className="text-xs font-medium text-primary">
+                        {t("questionnaire.current")}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {t("questionnaire.unanswered")}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="mt-3 text-lg sm:text-xl font-semibold leading-snug tracking-tight">
+                    {q.question}
+                  </h2>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-          <Button variant="outline" onClick={goPrev} disabled={safeIndex === 0 || isBusy}>
-            <ArrowLeft className="h-4 w-4" /> {t("common.previous")}
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => draftMutation.mutate(answersPayload(answers, questionIds))}
-              disabled={isBusy || answeredCount === 0}
-            >
-              {draftMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {t("common.saveDraft")}
-            </Button>
-            {isLast ? (
-              <Button
-                onClick={() => submitMutation.mutate(answersPayload(answers, questionIds))}
-                disabled={!allAnswered || isBusy}
-              >
-                {submitMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                {t("questionnaire.submitAssessment")}
-              </Button>
-            ) : (
-              <Button onClick={goNext} disabled={!answers[q.id] || isBusy}>
-                {t("common.next")}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
+                  <div className="mt-6 grid gap-2.5">
+                    {q.options
+                      .slice()
+                      .sort((a, b) => a.ordinal - b.ordinal)
+                      .map((o) => {
+                        const active = answers[q.id] === o.id;
+                        return (
+                          <button
+                            key={o.id}
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => selectAnswer(q.id, o.id)}
+                            className={cn(
+                              "group flex items-center justify-between gap-4 rounded-xl border p-4 text-left text-sm transition-all",
+                              active
+                                ? "border-primary bg-primary/5 shadow-sm"
+                                : "hover:border-primary/50 hover:bg-muted/40",
+                            )}
+                          >
+                            <span className="font-medium">{o.value}</span>
+                            <span
+                              className={cn(
+                                "grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors",
+                                active ? "border-primary bg-primary" : "border-border",
+                              )}
+                            >
+                              {active && (
+                                <span className="h-2 w-2 rounded-full bg-primary-foreground" />
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </Card>
+              );
+            })}
+
+            {actionError && (
+              <Card className="border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                {actionError}
+              </Card>
             )}
+
+            <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/90 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:px-5">
+              {submitAttempted && !allAnswered && (
+                <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {t("questionnaire.answerAllBeforeSubmit", { count: remaining })}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {t("questionnaire.answeredRatio", {
+                    answered: answeredCount,
+                    total,
+                  })}
+                  {draftSavedCount > 0
+                    ? ` · ${t("questionnaire.savedRatio", { saved: draftSavedCount, total })}`
+                    : ""}
+                  {draftDirty ? ` · ${t("questionnaire.unsaved")}` : ""}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => draftMutation.mutate(answersPayload(answers, questionIds))}
+                    disabled={isBusy || answeredCount === 0}
+                  >
+                    {draftMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    {t("common.saveDraft")}
+                  </Button>
+                  <Button onClick={handleSubmit} disabled={isBusy}>
+                    {submitMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    {t("questionnaire.submitAssessment")}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          {answeredCount}/{total} answered
-          {draftSavedCount > 0
-            ? ` · ${t("questionnaire.savedRatio", { saved: draftSavedCount, total })}`
-            : ""}
-          {draftDirty ? ` · ${t("questionnaire.unsaved")}` : ""}
-        </p>
       </main>
     </div>
   );

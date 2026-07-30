@@ -18,9 +18,7 @@ export function DiscBadge({
         className,
       )}
     >
-      <span className="grid h-4 w-4 place-items-center rounded-sm bg-current/20 text-current text-[10px]">
-        {type}
-      </span>
+      <span>{type}</span>
       {showLabel && <span>{discFullName[type]}</span>}
     </span>
   );
