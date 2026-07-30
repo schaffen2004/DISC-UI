@@ -127,10 +127,20 @@ export function isAnalysisTerminal(status?: DiscAnalysisStatus | null) {
   return status === "COMPLETED" || status === "BLOCKED" || status === "FAILED";
 }
 
-/** Backend only allows retry when FAILED due to a connection error. */
+/** Connection failures resume from the failed step; other failures use a full re-queue. */
 export function isAnalysisConnectionRetryable(analysis?: DiscAnalysis | null) {
   if (!analysis || analysis.status !== "FAILED") return false;
   return /connection error/i.test(analysis.error || "");
+}
+
+/** Re-analyze is allowed for terminal analysis states (and pending to re-enqueue). */
+export function isAnalysisRetryable(status?: DiscAnalysisStatus | null) {
+  return (
+    status === "FAILED" ||
+    status === "COMPLETED" ||
+    status === "BLOCKED" ||
+    status === "PENDING"
+  );
 }
 
 /** Retake is allowed when analysis is BLOCKED because consistency is below 70%. */

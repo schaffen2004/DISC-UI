@@ -27,15 +27,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import {
   downloadResultPdf,
   getAnalysisStatus,
   getResult,
-  isAnalysisConnectionRetryable,
   isAnalysisInProgress,
+  isAnalysisRetryable,
   isConsistencyRetakeAllowed,
   retakeAssessment,
   retryAnalysis,
@@ -62,33 +61,6 @@ function isDiscResultNotFound(error: unknown) {
   const message = error instanceof ApiError || error instanceof Error ? error.message : "";
   return message.includes("DISC_RESULT_NOT_FOUND");
 }
-
-const consistencyStyle: Record<string, { label: string; color: string; description: string }> = {
-  High: { label: "Cao", color: "text-[var(--success)]", description: "Câu trả lời rất nhất quán" },
-  Cao: { label: "Cao", color: "text-[var(--success)]", description: "Câu trả lời rất nhất quán" },
-  Acceptable: {
-    label: "Chấp nhận",
-    color: "text-primary",
-    description: "Câu trả lời khá nhất quán",
-  },
-  "Chấp nhận được": {
-    label: "Chấp nhận",
-    color: "text-primary",
-    description: "Câu trả lời khá nhất quán",
-  },
-  Unstable: {
-    label: "Không ổn định",
-    color: "text-[var(--warning)]",
-    description: "Có sự khác biệt đáng kể giữa các câu trả lời",
-  },
-  "Không ổn định": {
-    label: "Không ổn định",
-    color: "text-[var(--warning)]",
-    description: "Có sự khác biệt đáng kể giữa các câu trả lời",
-  },
-  Low: { label: "Thấp", color: "text-destructive", description: "Câu trả lời thiếu nhất quán" },
-  Thấp: { label: "Thấp", color: "text-destructive", description: "Câu trả lời thiếu nhất quán" },
-};
 
 const STEP_I18N_KEY: Record<DiscAnalysisStep, string> = {
   CONSISTENCY: "analysis.step.CONSISTENCY",
@@ -151,7 +123,7 @@ function ResultPage() {
   const analysisStatus = analysis?.status;
   const analyzing = isAnalysisInProgress(analysisStatus);
   const analysisFailed = analysisStatus === "FAILED" || analysisStatus === "BLOCKED";
-  const canRetryAnalysis = isAnalysisConnectionRetryable(analysis);
+  const canRetryAnalysis = isAnalysisRetryable(analysisStatus);
   const canRetake = isConsistencyRetakeAllowed(analysis);
 
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -179,17 +151,16 @@ function ResultPage() {
             } satisfies DiscAnalysis;
           }
           const failedIdx = prev.steps.findIndex((s) => s.status === "FAILED");
+          const isPartialResume = failedIdx >= 0 && prev.steps[failedIdx]?.step === res.resumedFrom;
           const steps = prev.steps.map((step, idx) => {
-            if (failedIdx >= 0 && idx >= failedIdx) {
-              return {
-                ...step,
-                status: "PENDING" as const,
-                message: undefined,
-                startedAt: undefined,
-                finishedAt: undefined,
-              };
-            }
-            return step;
+            if (isPartialResume && idx < failedIdx) return step;
+            return {
+              ...step,
+              status: "PENDING" as const,
+              message: undefined,
+              startedAt: undefined,
+              finishedAt: undefined,
+            };
           });
           const done = steps.filter((s) =>
             ["DONE", "SKIPPED", "BLOCKED"].includes(s.status),
@@ -200,6 +171,9 @@ function ResultPage() {
             currentStep: res.resumedFrom,
             error: null,
             finishedAt: null,
+            pdfReady: false,
+            scoreResult: isPartialResume ? prev.scoreResult : null,
+            llmReport: isPartialResume ? prev.llmReport : null,
             steps,
             progress: {
               done,
@@ -209,6 +183,15 @@ function ResultPage() {
           };
         },
       );
+      if (participantId) {
+        queryClient.setQueryData(
+          ["disc", "result", participantId],
+          (prev: DiscHistoryItem | null | undefined) => {
+            if (!prev) return prev;
+            return { ...prev, result: null, analysis: undefined };
+          },
+        );
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["disc", "analysis", participantId] }),
         queryClient.invalidateQueries({ queryKey: ["disc", "result", participantId] }),
@@ -221,6 +204,10 @@ function ResultPage() {
         setRetryError(t("analysis.retryOnlyConnection"));
       } else if (message.includes("DISC_ANALYSIS_RETRY_REQUIRES_FAILED")) {
         setRetryError(t("analysis.retryRequiresFailed"));
+      } else if (message.includes("DISC_ANALYSIS_RETRY_NOT_ALLOWED")) {
+        setRetryError(t("analysis.retryNotAllowed"));
+      } else if (message.includes("DISC_ANALYSIS_ALREADY_RUNNING")) {
+        setRetryError(t("analysis.retryAlreadyRunning"));
       } else if (message.includes("DISC_ANALYSIS_FAILED_STEP_NOT_FOUND")) {
         setRetryError(t("analysis.retryStepNotFound"));
       } else {
@@ -431,6 +418,21 @@ function ResultPage() {
           </div>
           {showScores && (
             <div className="flex flex-wrap gap-2">
+              {canRetryAnalysis && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => retryMutation.mutate()}
+                  disabled={retryMutation.isPending || analyzing}
+                >
+                  {retryMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {t("analysis.refreshStatus")}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => window.print()}>
                 <Printer className="h-4 w-4" />
                 {t("common.print")}
@@ -454,6 +456,12 @@ function ResultPage() {
         {pdfError && (
           <Card className="border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             {pdfError}
+          </Card>
+        )}
+
+        {retryError && !showTracing && (
+          <Card className="border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            {retryError}
           </Card>
         )}
 
@@ -484,10 +492,6 @@ function ResultPage() {
             onStartNew={() => {
               if (!window.confirm(t("analysis.newConfirm"))) return;
               retakeMutation.mutate("new");
-            }}
-            onRefresh={() => {
-              void analysisQuery.refetch();
-              void refetch();
             }}
           />
         )}
@@ -584,7 +588,6 @@ function AnalysisTracingCard({
   onRetry,
   onEditAnswers,
   onStartNew,
-  onRefresh,
 }: {
   analysis: DiscAnalysis;
   analyzing: boolean;
@@ -597,7 +600,6 @@ function AnalysisTracingCard({
   onRetry?: () => void;
   onEditAnswers?: () => void;
   onStartNew?: () => void;
-  onRefresh?: () => void;
 }) {
   const t = useT();
   const percent = analysis.progress?.percent ?? 0;
@@ -767,15 +769,11 @@ function AnalysisTracingCard({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {t("analysis.retry")}
+                {t("analysis.refreshStatus")}
               </Button>
             ) : (
               <p className="text-xs text-muted-foreground">{t("analysis.retryUnavailable")}</p>
             )}
-            <Button variant="outline" onClick={onRefresh} disabled={busy}>
-              <RefreshCw className="h-4 w-4" />
-              {t("analysis.refreshStatus")}
-            </Button>
           </div>
         )}
 
@@ -805,10 +803,16 @@ function AnalysisTracingCard({
                     )}
                     {t("analysis.startNew")}
                   </Button>
-                  <Button variant="outline" onClick={onRefresh} disabled={busy}>
-                    <RefreshCw className="h-4 w-4" />
-                    {t("analysis.refreshStatus")}
-                  </Button>
+                  {canRetry && (
+                    <Button variant="outline" onClick={onRetry} disabled={busy}>
+                      {retryPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      {t("analysis.refreshStatus")}
+                    </Button>
+                  )}
                 </div>
               </>
             ) : (
@@ -853,12 +857,11 @@ function ScoreResultView({
     value: result[`${axis}_percent`] ?? 0,
   }));
   const top = topDimension(result);
-  const cLevel = consistencyStyle[String(result.consistency_level)] ?? consistencyStyle.High;
   const employeeEmail = meta?.user?.email ?? user?.email ?? "—";
   const statusKey = meta?.status
     ? participantStatusMessageKey(meta.status as DiscParticipantStatus)
     : null;
-  const submittedLabel = meta?.submittedAt ? new Date(meta.submittedAt).toLocaleString() : "—";
+  const submittedLabel = meta?.submittedAt ? formatDateDdMmYyyy(meta.submittedAt) : "—";
 
   return (
     <>
@@ -875,7 +878,6 @@ function ScoreResultView({
               value={statusKey ? t(statusKey) : (meta?.status ?? "—")}
             />
             <InfoRow label={t("result.completedAt")} value={submittedLabel} />
-            <InfoRow label={t("result.algorithmVersion")} value={meta?.algorithmVersion ?? "—"} />
           </dl>
         </CardContent>
       </Card>
@@ -916,12 +918,8 @@ function ScoreResultView({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">{t("result.dimensionScores")}</CardTitle>
-            <CardDescription>{t("result.dimensionScoresDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("result.scoresTitle")}
-            </div>
             {DISC_DIMENSIONS.map((k) => {
               const pctVal = result[`${k}_percent`] ?? 0;
               const rawVal = result[k] ?? 0;
@@ -958,18 +956,6 @@ function ScoreResultView({
                 </div>
               );
             })}
-            <Separator className="my-3" />
-            <div className="rounded-lg border p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {t("result.consistencyLabel")}
-                </span>
-                <Badge variant="outline" className={cn("font-semibold", cLevel.color)}>
-                  {result.consistency}% — {cLevel.label}
-                </Badge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{cLevel.description}</p>
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -979,15 +965,13 @@ function ScoreResultView({
           <CardTitle>{t("result.aiAnalysis")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <AnalysisBlock title={t("result.trend")} accent="bg-sky-600">
+            <TrendHighlights result={result} />
+          </AnalysisBlock>
           {!llmReport ? (
             <p className="text-sm text-muted-foreground">{t("result.aiUnavailable")}</p>
           ) : (
             <>
-              {llmReport.trend && (
-                <AnalysisBlock title={t("result.trend")} accent="bg-sky-600">
-                  <TrendHighlights trend={llmReport.trend} />
-                </AnalysisBlock>
-              )}
               <AnalysisBlock title={t("result.profileSummary")} accent="bg-blue-700">
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">
                   {llmReport.profileSummary}
@@ -1001,9 +985,6 @@ function ScoreResultView({
               </AnalysisBlock>
               <AnalysisBlock title={t("result.workStyle")} accent="bg-purple-700">
                 <BulletList items={llmReport.workStyle} />
-              </AnalysisBlock>
-              <AnalysisBlock title={t("result.consistencyNarrative")} accent="bg-cyan-700">
-                <p className="text-sm leading-relaxed">{llmReport.consistency}</p>
               </AnalysisBlock>
             </>
           )}
@@ -1022,27 +1003,44 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TrendHighlights({ trend }: { trend: string }) {
-  const t = useT();
-  const items = trend
-    .split(";")
-    .map((item) => item.trim().replace(/\.$/, ""))
-    .map((item) => {
-      const match = item.match(/^(Đồng chủ đạo|Chủ đạo|Phụ trợ)\s*:\s*(.+)$/i);
-      if (!match) return null;
-      const type = match[1].toLocaleLowerCase("vi-VN");
-      return {
-        label: type === "phụ trợ" ? t("result.supportingTrend") : t("result.dominantTrend"),
-        value: match[2]
-          .replace(/\s*\(\s*\d+(?:[.,]\d+)?%\s*\)/g, "")
-          .replace(/\s+\d+(?:[.,]\d+)?%/g, "")
-          .trim(),
-        supporting: type === "phụ trợ",
-      };
-    })
-    .filter((item): item is { label: string; value: string; supporting: boolean } => Boolean(item));
+function formatDateDdMmYyyy(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
 
-  if (items.length === 0) return null;
+function TrendHighlights({ result }: { result: DiscScoreResult }) {
+  const t = useT();
+  const ranked = DISC_DIMENSIONS.map((dimension) => ({
+    dimension,
+    percent: result[`${dimension}_percent`] ?? 0,
+  })).sort((left, right) => right.percent - left.percent);
+  const topPercent = ranked[0]?.percent ?? 0;
+  const dominant = ranked.filter((item) => topPercent - item.percent <= 5);
+  const supporting = ranked.find(
+    (item) => !dominant.some((dominantItem) => dominantItem.dimension === item.dimension),
+  );
+  const items = [
+    {
+      label: t("result.dominantTrend"),
+      value: dominant.map((item) => item.dimension).join(" / "),
+      supporting: false,
+    },
+    ...(supporting
+      ? [
+          {
+            label: t("result.supportingTrend"),
+            value: supporting.dimension,
+            supporting: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -1052,14 +1050,16 @@ function TrendHighlights({ trend }: { trend: string }) {
           className={cn(
             "rounded-xl border px-4 py-3",
             item.supporting
-              ? "border-sky-500/30 bg-sky-500/5"
-              : "border-primary/35 bg-primary/10 shadow-sm",
+              ? "border-emerald-500/40 bg-emerald-500/10"
+              : "border-rose-500/45 bg-rose-500/10 shadow-sm",
           )}
         >
           <div
             className={cn(
               "text-xs font-semibold uppercase tracking-wider",
-              item.supporting ? "text-sky-700 dark:text-sky-300" : "text-primary",
+              item.supporting
+                ? "text-emerald-700 dark:text-emerald-300"
+                : "text-rose-700 dark:text-rose-300",
             )}
           >
             {item.label}
