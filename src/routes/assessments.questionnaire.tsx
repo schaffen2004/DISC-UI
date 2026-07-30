@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Loader2, Save, Sparkles } from "lucide-react";
@@ -52,6 +52,7 @@ function QuestionnairePage() {
   const { sessionId } = Route.useSearch();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const t = useT();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -167,14 +168,49 @@ function QuestionnairePage() {
   const submitMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof answersPayload>) =>
       submitAssessment(sessionId!, payload),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       setActionError(null);
-      setDone(true);
+      setDraftDirty(false);
+      const participantId = data?.participantId ?? assessmentQuery.data?.participantId;
+
+      if (participantId && data?.analysis) {
+        queryClient.setQueryData(["disc", "analysis", participantId], {
+          status: data.analysis.status,
+          currentStep: null,
+          progress: {
+            done: 0,
+            total: data.analysis.steps.length,
+            percent: 0,
+          },
+          steps: data.analysis.steps,
+          error: null,
+          contradictionReport: null,
+          pdfReady: false,
+          startedAt: null,
+          finishedAt: null,
+          scoreResult: null,
+          llmReport: null,
+        });
+      }
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["disc", "sessions"] }),
         queryClient.invalidateQueries({ queryKey: ["disc", "assessment", sessionId] }),
         queryClient.invalidateQueries({ queryKey: ["disc", "history", "me"] }),
+        participantId
+          ? queryClient.invalidateQueries({ queryKey: ["disc", "result", participantId] })
+          : Promise.resolve(),
       ]);
+
+      if (participantId) {
+        navigate({
+          to: "/assessments/result",
+          search: { participantId },
+        });
+        return;
+      }
+
+      setDone(true);
     },
     onError: (err) => {
       setActionError(

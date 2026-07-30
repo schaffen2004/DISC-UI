@@ -37,6 +37,60 @@ export type DiscSessionListItem = {
   createdAt: string;
 };
 
+export type DiscAnalysisStatus = "PENDING" | "RUNNING" | "BLOCKED" | "COMPLETED" | "FAILED";
+
+export type DiscAnalysisStep =
+  "CONSISTENCY" | "CONTRADICTION_CHECK" | "GROUP_SCORES" | "PROFILE_ANALYSIS" | "PDF_EXPORT";
+
+export type DiscAnalysisStepStatus =
+  "PENDING" | "RUNNING" | "DONE" | "SKIPPED" | "FAILED" | "BLOCKED";
+
+export type DiscAnalysisStepTrace = {
+  step: DiscAnalysisStep;
+  order: number;
+  label: string;
+  status: DiscAnalysisStepStatus;
+  startedAt?: string;
+  finishedAt?: string;
+  message?: string;
+  data?: Record<string, unknown>;
+};
+
+export type DiscLlmReport = {
+  trend: string;
+  profileSummary: string;
+  strengths: string[];
+  improvements: string[];
+  workStyle: string[];
+  consistency: string;
+};
+
+export type DiscAnalysis = {
+  status: DiscAnalysisStatus;
+  currentStep: DiscAnalysisStep | null;
+  progress: {
+    done: number;
+    total: number;
+    percent: number;
+  };
+  steps: DiscAnalysisStepTrace[];
+  error: string | null;
+  contradictionReport: unknown | null;
+  pdfReady: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  scoreResult: DiscScoreResult | null;
+  llmReport: DiscLlmReport | null;
+};
+
+export type DiscSubmitResult = {
+  participantId: string;
+  analysis: {
+    status: DiscAnalysisStatus;
+    steps: DiscAnalysisStepTrace[];
+  };
+};
+
 export type DiscHistoryItem = {
   participantId: string;
   session: {
@@ -48,6 +102,60 @@ export type DiscHistoryItem = {
   submittedAt?: string | null;
   verifiedAt?: string | null;
   result?: DiscScoreResult | null;
+  analysis?: DiscAnalysis | null;
+  algorithmVersion?: string | null;
+  user?: {
+    id: string;
+    email: string;
+    phoneNumber?: string | null;
+  } | null;
+};
+
+export const DISC_ANALYSIS_STEPS: DiscAnalysisStep[] = [
+  "CONSISTENCY",
+  "CONTRADICTION_CHECK",
+  "GROUP_SCORES",
+  "PROFILE_ANALYSIS",
+  "PDF_EXPORT",
+];
+
+export function isAnalysisInProgress(status?: DiscAnalysisStatus | null) {
+  return status === "PENDING" || status === "RUNNING";
+}
+
+export function isAnalysisTerminal(status?: DiscAnalysisStatus | null) {
+  return status === "COMPLETED" || status === "BLOCKED" || status === "FAILED";
+}
+
+/** Backend only allows retry when FAILED due to a connection error. */
+export function isAnalysisConnectionRetryable(analysis?: DiscAnalysis | null) {
+  if (!analysis || analysis.status !== "FAILED") return false;
+  return /connection error/i.test(analysis.error || "");
+}
+
+/** Retake is allowed when analysis is BLOCKED because consistency is below 70%. */
+export function isConsistencyRetakeAllowed(analysis?: DiscAnalysis | null) {
+  if (!analysis || analysis.status !== "BLOCKED") return false;
+  const consistency = analysis.scoreResult?.consistency;
+  if (typeof consistency === "number" && Number.isFinite(consistency)) {
+    return consistency < 70;
+  }
+  return /consistency\s+\d+(?:\.\d+)?%\s*<\s*70/i.test(analysis.error || "");
+}
+
+export type DiscAnalysisRetryResult = {
+  participantId: string;
+  resumedFrom: DiscAnalysisStep;
+  status: DiscAnalysisStatus;
+};
+
+export type DiscRetakeMode = "edit" | "new";
+
+export type DiscRetakeResult = {
+  participantId: string;
+  sessionId: string;
+  mode: DiscRetakeMode;
+  answersCleared: boolean;
 };
 
 export type DiscQuestionOption = {
@@ -207,7 +315,7 @@ export function saveAssessmentDraft(sessionId: string, payload: SaveDiscAnswersP
 }
 
 export function submitAssessment(sessionId: string, payload: SaveDiscAnswersPayload) {
-  return apiFetch(`/disc/sessions/${sessionId}/assessment/submit`, {
+  return apiFetch<DiscSubmitResult>(`/disc/sessions/${sessionId}/assessment/submit`, {
     method: "POST",
     body: payload,
   });
@@ -215,6 +323,26 @@ export function submitAssessment(sessionId: string, payload: SaveDiscAnswersPayl
 
 export function getResult(participantId: string) {
   return apiFetch<DiscHistoryItem>(`/disc/results/${participantId}`);
+}
+
+/** Poll analysis pipeline progress for UI tracing. */
+export function getAnalysisStatus(participantId: string) {
+  return apiFetch<DiscAnalysis | null>(`/disc/results/${participantId}/analysis`);
+}
+
+/** Resume analysis from the failed step (connection errors only). */
+export function retryAnalysis(participantId: string) {
+  return apiFetch<DiscAnalysisRetryResult>(`/disc/results/${participantId}/analysis/retry`, {
+    method: "POST",
+  });
+}
+
+/** Reopen assessment after low consistency: edit kept answers or start new. */
+export function retakeAssessment(participantId: string, mode: DiscRetakeMode) {
+  return apiFetch<DiscRetakeResult>(`/disc/results/${participantId}/retake`, {
+    method: "POST",
+    body: { mode },
+  });
 }
 
 export function getResultPdfUrl(participantId: string) {
