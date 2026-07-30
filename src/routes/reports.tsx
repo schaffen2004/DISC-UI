@@ -26,7 +26,7 @@ import {
   type DiscScoreResult,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
-import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
+import { participantStatusMessageKey, sessionStatusMessageKey, useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reports")({
@@ -40,7 +40,7 @@ export const Route = createFileRoute("/reports")({
 });
 
 function EmptyAssessmentsNotice({
-  title = "Chưa có bài đánh giá",
+  title,
   description,
   action,
 }: {
@@ -48,6 +48,7 @@ function EmptyAssessmentsNotice({
   description: string;
   action?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
@@ -55,7 +56,7 @@ function EmptyAssessmentsNotice({
           <FileText className="h-5 w-5" />
         </div>
         <div className="space-y-1">
-          <h2 className="text-base font-semibold">{title}</h2>
+          <h2 className="text-base font-semibold">{title ?? t("reports.emptyTitle")}</h2>
           <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
         </div>
         {action}
@@ -77,10 +78,12 @@ const participantStatusStyle: Record<DiscParticipantStatus, string> = {
   VERIFIED: "bg-[var(--success)]/10 text-[var(--success)] border-[var(--success)]/25",
 };
 
-function formatDate(value?: string | null) {
+function formatDate(value: string | null | undefined, locale: string) {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString(locale === "vi" ? "vi-VN" : "en-US");
 }
 
 function topScore(result?: DiscScoreResult | null) {
@@ -107,7 +110,7 @@ function ReportsPage() {
 
 function StaffReportsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const t = useT();
+  const { locale, t } = useI18n();
   const [q, setQ] = useState("");
 
   const sessionsQuery = useQuery({
@@ -133,30 +136,28 @@ function StaffReportsPage() {
   return (
     <div className="space-y-6">
       <header className="min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Reports</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Session reports for assessments you manage.
-        </p>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">{t("reports.title")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("reports.staffDescription")}</p>
       </header>
 
       {!isAuthenticated && !authLoading && (
         <Card className="p-4 text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t("common.signIn")}
           </Link>{" "}
-          to load session reports.
+          {t("reports.signInSessions")}
         </Card>
       )}
 
       {(authLoading || (isAuthenticated && sessionsQuery.isLoading)) && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading sessions…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("reports.loadingSessions")}
         </div>
       )}
 
       {sessionsQuery.isError && (
         <Card className="p-4 text-sm text-destructive">
-          {(sessionsQuery.error as Error)?.message || "Failed to load sessions"}
+          {(sessionsQuery.error as Error)?.message || t("reports.loadSessionsFailed")}
         </Card>
       )}
 
@@ -165,10 +166,10 @@ function StaffReportsPage() {
         !sessionsQuery.isError &&
         (allManaged.length === 0 ? (
           <EmptyAssessmentsNotice
-            description="Chưa có bài đánh giá nào được tạo. Tạo assessment mới để bắt đầu theo dõi báo cáo."
+            description={t("reports.emptyManaged")}
             action={
               <Button asChild size="sm">
-                <Link to="/assessments/new">Tạo bài đánh giá</Link>
+                <Link to="/assessments/new">{t("reports.createAssessment")}</Link>
               </Button>
             }
           />
@@ -178,7 +179,7 @@ function StaffReportsPage() {
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search sessions…"
+                  placeholder={t("reports.searchSessions")}
                   className="pl-8"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
@@ -190,10 +191,10 @@ function StaffReportsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="pl-4">Session</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Participants</TableHead>
-                      <TableHead>Created</TableHead>
+                      <TableHead className="pl-4">{t("reports.session")}</TableHead>
+                      <TableHead>{t("reports.status")}</TableHead>
+                      <TableHead>{t("reports.participants")}</TableHead>
+                      <TableHead>{t("reports.created")}</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>
@@ -204,7 +205,7 @@ function StaffReportsPage() {
                           colSpan={5}
                           className="h-24 text-center text-sm text-muted-foreground"
                         >
-                          Không tìm thấy bài đánh giá phù hợp.
+                          {t("reports.noMatch")}
                         </TableCell>
                       </TableRow>
                     )}
@@ -237,13 +238,13 @@ function StaffReportsPage() {
                         <TableCell>
                           <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Calendar className="h-3.5 w-3.5" />
-                            {formatDate(s.createdAt)}
+                            {formatDate(s.createdAt, locale)}
                           </span>
                         </TableCell>
                         <TableCell>
                           <Button asChild variant="outline" size="sm">
                             <Link to="/reports/$id" params={{ id: s.id }}>
-                              Open
+                              {t("reports.open")}
                             </Link>
                           </Button>
                         </TableCell>
@@ -261,7 +262,7 @@ function StaffReportsPage() {
 
 function MyReportsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const t = useT();
+  const { locale, t } = useI18n();
   const [q, setQ] = useState("");
 
   const historyQuery = useQuery({
@@ -270,7 +271,7 @@ function MyReportsPage() {
     enabled: isAuthenticated,
   });
 
-  const allHistory = historyQuery.data ?? [];
+  const allHistory = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return allHistory;
@@ -282,30 +283,30 @@ function MyReportsPage() {
   return (
     <div className="space-y-6">
       <header className="min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">My reports</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Only your personal DISC results are shown here.
-        </p>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          {t("reports.myTitle")}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("reports.myDescription")}</p>
       </header>
 
       {!isAuthenticated && !authLoading && (
         <Card className="p-4 text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t("common.signIn")}
           </Link>{" "}
-          to load your reports.
+          {t("reports.signInMine")}
         </Card>
       )}
 
       {(authLoading || (isAuthenticated && historyQuery.isLoading)) && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading your reports…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("reports.loadingMine")}
         </div>
       )}
 
       {historyQuery.isError && (
         <Card className="p-4 text-sm text-destructive">
-          {(historyQuery.error as Error)?.message || "Failed to load reports"}
+          {(historyQuery.error as Error)?.message || t("reports.loadFailed")}
         </Card>
       )}
 
@@ -314,10 +315,10 @@ function MyReportsPage() {
         !historyQuery.isError &&
         (allHistory.length === 0 ? (
           <EmptyAssessmentsNotice
-            description="Bạn chưa có bài đánh giá nào. Khi được giao bài DISC, báo cáo sẽ xuất hiện tại đây."
+            description={t("reports.emptyMine")}
             action={
               <Button asChild variant="outline" size="sm">
-                <Link to="/assessments">Xem assessments</Link>
+                <Link to="/assessments">{t("reports.viewAssessments")}</Link>
               </Button>
             }
           />
@@ -327,7 +328,7 @@ function MyReportsPage() {
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search your reports…"
+                  placeholder={t("reports.searchMine")}
                   className="pl-8"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
@@ -340,11 +341,11 @@ function MyReportsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="pl-4">Session</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>DISC</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead>Submitted</TableHead>
+                      <TableHead className="pl-4">{t("reports.session")}</TableHead>
+                      <TableHead>{t("reports.status")}</TableHead>
+                      <TableHead>{t("reports.disc")}</TableHead>
+                      <TableHead>{t("reports.score")}</TableHead>
+                      <TableHead>{t("reports.submitted")}</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>
@@ -355,7 +356,7 @@ function MyReportsPage() {
                           colSpan={6}
                           className="h-24 text-center text-sm text-muted-foreground"
                         >
-                          Không tìm thấy bài đánh giá phù hợp.
+                          {t("reports.noMatch")}
                         </TableCell>
                       </TableRow>
                     )}
@@ -368,7 +369,7 @@ function MyReportsPage() {
                             <div className="min-w-0">
                               <div className="truncate text-sm font-medium">{h.session.title}</div>
                               <div className="text-xs text-muted-foreground">
-                                {formatDate(h.session.createdAt)}
+                                {formatDate(h.session.createdAt, locale)}
                               </div>
                             </div>
                           </TableCell>
@@ -389,7 +390,7 @@ function MyReportsPage() {
                           </TableCell>
                           <TableCell className="tabular-nums font-medium">{score ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {formatDate(h.submittedAt)}
+                            {formatDate(h.submittedAt, locale)}
                           </TableCell>
                           <TableCell>
                             {h.result ? (
@@ -398,7 +399,7 @@ function MyReportsPage() {
                                   to="/assessments/result"
                                   search={{ participantId: h.participantId }}
                                 >
-                                  Open
+                                  {t("reports.open")}
                                 </Link>
                               </Button>
                             ) : (
@@ -407,7 +408,7 @@ function MyReportsPage() {
                                   to="/assessments/questionnaire"
                                   search={{ sessionId: h.session.id }}
                                 >
-                                  Continue
+                                  {t("reports.continue")}
                                 </Link>
                               </Button>
                             )}

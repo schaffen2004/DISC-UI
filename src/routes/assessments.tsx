@@ -207,19 +207,19 @@ function AssessmentsPage() {
             return (
               <Card key={a.id} className="card-hover">
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium text-muted-foreground truncate">
-                        {a.id.slice(0, 8)}
-                      </div>
-                      <CardTitle className="mt-1 truncate text-base">{a.title}</CardTitle>
-                      <CardDescription className="mt-1">
-                        {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "—"}
-                      </CardDescription>
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-muted-foreground truncate">
+                      {a.id.slice(0, 8)}
                     </div>
-                    <Badge variant="outline" className={statusStyle[a.status]}>
-                      {t(sessionStatusMessageKey(a.status))}
-                    </Badge>
+                    <CardTitle className="mt-1 truncate text-base">{a.title}</CardTitle>
+                    <div className="mt-2">
+                      <Badge variant="outline" className={statusStyle[a.status]}>
+                        {t(sessionStatusMessageKey(a.status))}
+                      </Badge>
+                    </div>
+                    <CardDescription className="mt-2">
+                      {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "—"}
+                    </CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">

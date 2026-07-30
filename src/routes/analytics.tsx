@@ -38,6 +38,7 @@ import {
   type DiscSessionListItem,
   type DiscSessionOverview,
 } from "@/lib/api/disc";
+import { participantStatusMessageKey, sessionStatusMessageKey, useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -56,6 +57,7 @@ function AnalyticsPage() {
 
 function MyAnalytics() {
   const { isAuthenticated, isLoading: authLoading, displayName } = useAuth();
+  const { t } = useI18n();
 
   const historyQuery = useQuery({
     queryKey: ["disc", "history", "me"],
@@ -95,30 +97,32 @@ function MyAnalytics() {
   return (
     <div className="space-y-6">
       <header className="min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">My analytics</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          {t("analytics.myTitle")}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Personal DISC insights for {displayName} — only your data.
+          {t("analytics.myDescription", { name: displayName })}
         </p>
       </header>
 
       {!isAuthenticated && !authLoading && (
         <Card className="p-4 text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t("common.signIn")}
           </Link>{" "}
-          to view your analytics.
+          {t("analytics.signInMine")}
         </Card>
       )}
 
       {(authLoading || (isAuthenticated && historyQuery.isLoading)) && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading your analytics…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("analytics.loadingMine")}
         </div>
       )}
 
       {historyQuery.isError && (
         <Card className="p-4 text-sm text-destructive">
-          {(historyQuery.error as Error)?.message || "Failed to load analytics"}
+          {(historyQuery.error as Error)?.message || t("analytics.loadFailed")}
         </Card>
       )}
 
@@ -126,19 +130,19 @@ function MyAnalytics() {
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Assessments</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.assessments")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{history.length}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">With results</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.withResults")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{withResult.length}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Latest DISC</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.latestDisc")}</div>
               <div className="mt-1">{dominant ? <DiscBadge type={dominant} showLabel /> : "—"}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Latest session</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.latestSession")}</div>
               <div className="mt-1 truncate text-sm font-medium">
                 {latest?.session.title ?? "—"}
               </div>
@@ -147,19 +151,19 @@ function MyAnalytics() {
 
           {!latest?.result ? (
             <Card className="p-6 text-center space-y-3">
-              <p className="text-sm text-muted-foreground">
-                No scored results yet. Complete an assessment to see your personal charts.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("analytics.noScoredResults")}</p>
               <Button asChild variant="outline">
-                <Link to="/assessments">Go to assessments</Link>
+                <Link to="/assessments">{t("analytics.goAssessments")}</Link>
               </Button>
             </Card>
           ) : (
             <div className="grid gap-4 lg:grid-cols-3">
               <Card className="lg:col-span-2">
                 <CardHeader>
-                  <CardTitle>Your DISC profile</CardTitle>
-                  <CardDescription>Natural profile from {latest.session.title}</CardDescription>
+                  <CardTitle>{t("analytics.yourProfile")}</CardTitle>
+                  <CardDescription>
+                    {t("analytics.profileFrom", { session: latest.session.title })}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[280px]">
@@ -185,8 +189,8 @@ function MyAnalytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Score mix</CardTitle>
-                  <CardDescription>Natural percentages</CardDescription>
+                  <CardTitle>{t("analytics.scoreMix")}</CardTitle>
+                  <CardDescription>{t("analytics.naturalPercentages")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[200px]">
@@ -234,8 +238,8 @@ function MyAnalytics() {
           {trendData.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Your score trend</CardTitle>
-                <CardDescription>Natural DISC scores across completed assessments</CardDescription>
+                <CardTitle>{t("analytics.scoreTrend")}</CardTitle>
+                <CardDescription>{t("analytics.scoreTrendDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[280px]">
@@ -304,12 +308,15 @@ function monthKey(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthLabel(key: string) {
+function monthLabel(key: string, locale: string) {
   const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleString(undefined, { month: "short", year: "2-digit" });
+  return new Date(y, m - 1, 1).toLocaleString(locale === "vi" ? "vi-VN" : "en-US", {
+    month: "short",
+    year: "2-digit",
+  });
 }
 
-function buildMonthTrend(sessions: DiscSessionListItem[]) {
+function buildMonthTrend(sessions: DiscSessionListItem[], locale: string) {
   const now = new Date();
   const buckets: Array<{
     key: string;
@@ -333,7 +340,7 @@ function buildMonthTrend(sessions: DiscSessionListItem[]) {
     if (s.status === "CLOSED") b.closed += 1;
   }
   return buckets.map((b) => ({
-    month: monthLabel(b.key),
+    month: monthLabel(b.key, locale),
     created: b.created,
     closed: b.closed,
     participants: b.participants,
@@ -358,6 +365,7 @@ function buildDiscCounts(results: Array<DiscScoreResult | null | undefined>) {
 
 function StaffAnalytics() {
   const { isAuthenticated, isLoading: authLoading, role } = useAuth();
+  const { locale, t } = useI18n();
   const isOperator = (role ?? "").toUpperCase() === "OPERATOR";
 
   const sessionsQuery = useQuery({
@@ -417,12 +425,22 @@ function StaffAnalytics() {
 
   const statusPie = useMemo(() => {
     const items = [
-      { type: "OPEN", label: "Active", value: openCount, color: "var(--primary)" },
-      { type: "CLOSED", label: "Closed", value: closedCount, color: "var(--disc-s)" },
-      { type: "DRAFT", label: "Draft", value: draftCount, color: "var(--muted-foreground)" },
+      { type: "OPEN", label: t("session.status.OPEN"), value: openCount, color: "var(--primary)" },
+      {
+        type: "CLOSED",
+        label: t("session.status.CLOSED"),
+        value: closedCount,
+        color: "var(--disc-s)",
+      },
+      {
+        type: "DRAFT",
+        label: t("session.status.DRAFT"),
+        value: draftCount,
+        color: "var(--muted-foreground)",
+      },
     ];
     return items.filter((d) => d.value > 0);
-  }, [openCount, closedCount, draftCount]);
+  }, [openCount, closedCount, draftCount, t]);
 
   const participantStatusPie = useMemo(() => {
     const counts = { INVITED: 0, IN_PROGRESS: 0, SUBMITTED: 0, VERIFIED: 0 };
@@ -430,22 +448,32 @@ function StaffAnalytics() {
     return [
       {
         type: "INVITED",
-        label: "Invited",
+        label: t(participantStatusMessageKey("INVITED")),
         value: counts.INVITED,
         color: "var(--muted-foreground)",
       },
       {
         type: "IN_PROGRESS",
-        label: "In progress",
+        label: t(participantStatusMessageKey("IN_PROGRESS")),
         value: counts.IN_PROGRESS,
         color: "var(--warning)",
       },
-      { type: "SUBMITTED", label: "Submitted", value: counts.SUBMITTED, color: "var(--primary)" },
-      { type: "VERIFIED", label: "Verified", value: counts.VERIFIED, color: "var(--disc-s)" },
+      {
+        type: "SUBMITTED",
+        label: t(participantStatusMessageKey("SUBMITTED")),
+        value: counts.SUBMITTED,
+        color: "var(--primary)",
+      },
+      {
+        type: "VERIFIED",
+        label: t(participantStatusMessageKey("VERIFIED")),
+        value: counts.VERIFIED,
+        color: "var(--disc-s)",
+      },
     ].filter((d) => d.value > 0);
-  }, [allParticipants]);
+  }, [allParticipants, t]);
 
-  const monthTrend = useMemo(() => buildMonthTrend(sessions), [sessions]);
+  const monthTrend = useMemo(() => buildMonthTrend(sessions, locale), [sessions, locale]);
 
   const avgRadar = useMemo(() => {
     const sums = { D: 0, I: 0, S: 0, C: 0 };
@@ -495,32 +523,32 @@ function StaffAnalytics() {
   return (
     <div className="space-y-6">
       <header className="min-w-0">
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Analytics</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          {t("analytics.title")}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {isOperator
-            ? "Overview of sessions you created or joined."
-            : "Organization-wide assessment overview from live data."}
+          {isOperator ? t("analytics.operatorDescription") : t("analytics.staffDescription")}
         </p>
       </header>
 
       {!isAuthenticated && !authLoading && (
         <Card className="p-4 text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t("common.signIn")}
           </Link>{" "}
-          to load analytics.
+          {t("analytics.signInStaff")}
         </Card>
       )}
 
       {(authLoading || (isAuthenticated && isLoading)) && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading live analytics…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("analytics.loadingStaff")}
         </div>
       )}
 
       {sessionsQuery.isError && (
         <Card className="p-4 text-sm text-destructive">
-          {(sessionsQuery.error as Error)?.message || "Failed to load sessions"}
+          {(sessionsQuery.error as Error)?.message || t("reports.loadSessionsFailed")}
         </Card>
       )}
 
@@ -528,38 +556,36 @@ function StaffAnalytics() {
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Sessions</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.sessions")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{sessions.length}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Active</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.active")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{openCount}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Completed</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.completed")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{closedCount}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Assignees</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.assignees")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{totalParticipants}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Scored results</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.scoredResults")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{withResult.length}</div>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground">Completion</div>
+              <div className="text-xs text-muted-foreground">{t("analytics.completion")}</div>
               <div className="mt-1 text-lg font-semibold tabular-nums">{completionRate}%</div>
             </Card>
           </div>
 
           {sessions.length === 0 ? (
             <Card className="p-8 text-center space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Chưa có session để phân tích. Tạo assessment để xem tổng quan.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("analytics.noSessions")}</p>
               <Button asChild variant="outline">
-                <Link to="/assessments/new">Create assessment</Link>
+                <Link to="/assessments/new">{t("reports.createAssessment")}</Link>
               </Button>
             </Card>
           ) : (
@@ -567,10 +593,8 @@ function StaffAnalytics() {
               <div className="grid gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                   <CardHeader>
-                    <CardTitle>Session activity</CardTitle>
-                    <CardDescription>
-                      Created vs completed sessions in the last 6 months
-                    </CardDescription>
+                    <CardTitle>{t("analytics.sessionActivity")}</CardTitle>
+                    <CardDescription>{t("analytics.sessionActivityDesc")}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="h-[280px]">
@@ -607,7 +631,7 @@ function StaffAnalytics() {
                           <Line
                             type="monotone"
                             dataKey="created"
-                            name="Created"
+                            name={t("analytics.created")}
                             stroke="var(--primary)"
                             strokeWidth={2.5}
                             dot={{ r: 3 }}
@@ -615,7 +639,7 @@ function StaffAnalytics() {
                           <Line
                             type="monotone"
                             dataKey="closed"
-                            name="Closed"
+                            name={t("analytics.closed")}
                             stroke="var(--disc-s)"
                             strokeWidth={2}
                             dot={{ r: 3 }}
@@ -628,12 +652,14 @@ function StaffAnalytics() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Session status</CardTitle>
-                    <CardDescription>Live breakdown</CardDescription>
+                    <CardTitle>{t("analytics.sessionStatus")}</CardTitle>
+                    <CardDescription>{t("analytics.liveBreakdown")}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {statusPie.length === 0 ? (
-                      <p className="py-16 text-center text-sm text-muted-foreground">No data</p>
+                      <p className="py-16 text-center text-sm text-muted-foreground">
+                        {t("analytics.noData")}
+                      </p>
                     ) : (
                       <>
                         <div className="h-[200px]">
@@ -685,15 +711,13 @@ function StaffAnalytics() {
               <div className="grid gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                   <CardHeader>
-                    <CardTitle>DISC by session</CardTitle>
-                    <CardDescription>
-                      Dominant profiles from managed sessions with scored results
-                    </CardDescription>
+                    <CardTitle>{t("analytics.discBySession")}</CardTitle>
+                    <CardDescription>{t("analytics.discBySessionDesc")}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {sessionDiscBars.length === 0 ? (
                       <p className="py-16 text-center text-sm text-muted-foreground">
-                        Chưa có kết quả DISC từ các session bạn quản lý.
+                        {t("analytics.noManagedDisc")}
                       </p>
                     ) : (
                       <div className="h-[300px]">
@@ -745,13 +769,13 @@ function StaffAnalytics() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Overall DISC</CardTitle>
-                    <CardDescription>Dominant type mix</CardDescription>
+                    <CardTitle>{t("analytics.overallDisc")}</CardTitle>
+                    <CardDescription>{t("analytics.dominantMix")}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {!hasDiscData ? (
                       <p className="py-16 text-center text-sm text-muted-foreground">
-                        Chưa có kết quả để tổng hợp.
+                        {t("analytics.noAggregate")}
                       </p>
                     ) : (
                       <>
@@ -808,16 +832,15 @@ function StaffAnalytics() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Average DISC profile</CardTitle>
+                    <CardTitle>{t("analytics.averageProfile")}</CardTitle>
                     <CardDescription>
-                      Mean natural scores across {withResult.length} scored participant
-                      {withResult.length === 1 ? "" : "s"}
+                      {t("analytics.averageProfileDesc", { count: withResult.length })}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {withResult.length === 0 ? (
                       <p className="py-16 text-center text-sm text-muted-foreground">
-                        Chưa đủ dữ liệu để vẽ radar.
+                        {t("analytics.noRadarData")}
                       </p>
                     ) : (
                       <div className="h-[300px]">
@@ -844,16 +867,17 @@ function StaffAnalytics() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Participant progress</CardTitle>
+                    <CardTitle>{t("analytics.participantProgress")}</CardTitle>
                     <CardDescription>
-                      Status mix from {allParticipants.length} tracked participant
-                      {allParticipants.length === 1 ? "" : "s"}
+                      {t("analytics.participantProgressDesc", {
+                        count: allParticipants.length,
+                      })}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {participantStatusPie.length === 0 ? (
                       <p className="py-16 text-center text-sm text-muted-foreground">
-                        Chưa có participant trong các session quản lý.
+                        {t("analytics.noParticipants")}
                       </p>
                     ) : (
                       <>
@@ -906,11 +930,11 @@ function StaffAnalytics() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Managed sessions</CardTitle>
-                    <CardDescription>Quick overview of sessions you own</CardDescription>
+                    <CardTitle>{t("analytics.managedSessions")}</CardTitle>
+                    <CardDescription>{t("analytics.managedSessionsDesc")}</CardDescription>
                   </div>
                   <Button variant="outline" size="sm" asChild>
-                    <Link to="/assessments">View all</Link>
+                    <Link to="/assessments">{t("analytics.viewAll")}</Link>
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -922,19 +946,20 @@ function StaffAnalytics() {
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{s.title}</div>
                         <div className="text-xs text-muted-foreground">
-                          {s.participantCount} participants · {s.status}
+                          {t("analytics.participantCount", { count: s.participantCount })} ·{" "}
+                          {t(sessionStatusMessageKey(s.status))}
                         </div>
                       </div>
                       <Button variant="ghost" size="sm" asChild>
                         <Link to="/reports/$id" params={{ id: s.id }}>
-                          Report
+                          {t("analytics.report")}
                         </Link>
                       </Button>
                     </div>
                   ))}
                   {managedSessions.length === 0 && (
                     <p className="text-sm text-muted-foreground">
-                      Bạn chưa tạo session nào để quản lý.
+                      {t("analytics.noManagedSessions")}
                     </p>
                   )}
                 </CardContent>

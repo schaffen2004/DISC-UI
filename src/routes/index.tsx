@@ -7,7 +7,6 @@ import {
   Clock,
   TrendingUp,
   Plus,
-  UserPlus,
   Download,
   ArrowRight,
   Sparkles,
@@ -36,8 +35,6 @@ import { StatCard } from "@/components/stat-card";
 import { DiscBadge } from "@/components/disc-badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import {
@@ -46,11 +43,10 @@ import {
   listSessions,
   filterSessionsForRole,
   topDimension,
-  type DiscHistoryItem,
   type DiscScoreResult,
   type DiscSessionListItem,
 } from "@/lib/api/disc";
-import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
+import { participantStatusMessageKey, sessionStatusMessageKey, useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -68,12 +64,15 @@ function monthKey(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthLabel(key: string) {
+function monthLabel(key: string, locale: string) {
   const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleString(undefined, { month: "short", year: "2-digit" });
+  return new Date(y, m - 1, 1).toLocaleString(locale === "vi" ? "vi-VN" : "en-US", {
+    month: "short",
+    year: "2-digit",
+  });
 }
 
-function buildSessionTrend(sessions: DiscSessionListItem[]) {
+function buildSessionTrend(sessions: DiscSessionListItem[], locale: string) {
   const now = new Date();
   const buckets: Array<{
     key: string;
@@ -99,7 +98,7 @@ function buildSessionTrend(sessions: DiscSessionListItem[]) {
     if (s.status === "CLOSED") b.closed += 1;
   }
   return buckets.map((b) => ({
-    month: monthLabel(b.key),
+    month: monthLabel(b.key, locale),
     created: b.created,
     open: b.open,
     closed: b.closed,
@@ -217,8 +216,8 @@ type DashboardData = ReturnType<typeof useDiscDashboard>;
 
 function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: DashboardData) {
   const { displayName } = useAuth();
-  const t = useT();
-  const firstName = displayName.split(/\s+/)[0] || "there";
+  const { locale, t } = useI18n();
+  const firstName = displayName.trim().split(/\s+/).at(-1) || "there";
 
   const mySessions = useMemo(
     () =>
@@ -234,25 +233,18 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
       (s.status === "OPEN" && !s.myParticipant) || isPendingParticipant(s.myParticipant?.status),
   );
   const completed = mySessions.filter((s) => isDoneParticipant(s.myParticipant?.status));
-  const withResult = history.filter((h) => h.result);
-  const latestReports = withResult.slice(0, 5);
+  const withResult = useMemo(
+    () =>
+      history
+        .filter((item) => item.result)
+        .sort(
+          (left, right) =>
+            new Date(right.submittedAt ?? 0).getTime() - new Date(left.submittedAt ?? 0).getTime(),
+        ),
+    [history],
+  );
   const activePending = pending[0];
   const latestResult = withResult[0];
-
-  const statusPie = useMemo(() => {
-    const counts = { pending: 0, done: 0, other: 0 };
-    for (const s of mySessions) {
-      const st = s.myParticipant?.status;
-      if ((s.status === "OPEN" && !st) || isPendingParticipant(st)) counts.pending += 1;
-      else if (isDoneParticipant(st)) counts.done += 1;
-      else counts.other += 1;
-    }
-    return [
-      { type: "pending", label: "Pending", value: counts.pending, color: "var(--warning)" },
-      { type: "done", label: "Completed", value: counts.done, color: "var(--disc-s)" },
-      { type: "other", label: "Other", value: counts.other, color: "var(--muted-foreground)" },
-    ].filter((d) => d.value > 0);
-  }, [mySessions]);
 
   const scoreBars = useMemo(() => {
     const r = latestResult?.result;
@@ -269,23 +261,18 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
   return (
     <div className="space-y-6">
       <header className="min-w-0">
-        <div className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          My overview
-        </div>
-        <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight">
-          Good morning, {firstName}
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          {t("dashboard.greeting", { name: firstName })}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Your personal assessments and DISC results only.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{t("dashboard.employeeIntro")}</p>
       </header>
 
       {!isAuthenticated && (
         <Card className="p-4 text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t("common.signIn")}
           </Link>{" "}
-          to load your dashboard.
+          {t("dashboard.signInEmployee")}
         </Card>
       )}
 
@@ -296,7 +283,7 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
               <div className="min-w-0">
                 <Badge variant="secondary" className="gap-1.5 border">
                   <Sparkles className="h-3 w-3 text-primary" />
-                  Pending for you
+                  {t("dashboard.pendingForYou")}
                 </Badge>
                 <h2 className="mt-3 text-xl sm:text-2xl font-semibold tracking-tight">
                   {activePending.title}
@@ -306,18 +293,22 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
                     ? t(participantStatusMessageKey(activePending.myParticipant.status))
                     : t("assessments.availableToTake")}{" "}
                   · {t(sessionStatusMessageKey(activePending.status))}
-                  {pending.length > 1 ? ` · +${pending.length - 1} more` : ""}
+                  {pending.length > 1
+                    ? ` · ${t("dashboard.more", { count: pending.length - 1 })}`
+                    : ""}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Button asChild>
                     <Link to="/assessments/questionnaire" search={{ sessionId: activePending.id }}>
                       <PlayCircle className="h-4 w-4" />
-                      {activePending.myParticipant ? "Continue assessment" : "Take assessment"}
+                      {activePending.myParticipant
+                        ? t("dashboard.continueAssessment")
+                        : t("dashboard.takeAssessment")}
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
                   <Button variant="outline" asChild>
-                    <Link to="/assessments">View all</Link>
+                    <Link to="/assessments">{t("dashboard.viewAll")}</Link>
                   </Button>
                 </div>
               </div>
@@ -331,37 +322,54 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
 
       {isLoading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading your data…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("dashboard.loadingYourData")}
         </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Assigned to me" value={mySessions.length} icon={Users} accent="primary" />
-        <StatCard label="Pending" value={pending.length} icon={Clock} accent="warning" />
-        <StatCard label="Completed" value={completed.length} icon={CheckCircle2} accent="success" />
-        <StatCard label="My results" value={withResult.length} icon={FileText} accent="primary" />
+        <StatCard
+          label={t("dashboard.assignedToMe")}
+          value={mySessions.length}
+          icon={Users}
+          accent="primary"
+        />
+        <StatCard
+          label={t("dashboard.pending")}
+          value={pending.length}
+          icon={Clock}
+          accent="warning"
+        />
+        <StatCard
+          label={t("dashboard.completed")}
+          value={completed.length}
+          icon={CheckCircle2}
+          accent="success"
+        />
+        <StatCard
+          label={t("dashboard.myResults")}
+          value={withResult.length}
+          icon={FileText}
+          accent="primary"
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>My DISC profile</CardTitle>
-            <CardDescription>
-              {latestResult
-                ? `Latest result from “${latestResult.session.title}”`
-                : "Scores from your most recent assessment"}
-            </CardDescription>
+            <CardTitle>{t("dashboard.myDiscProfile")}</CardTitle>
           </CardHeader>
           <CardContent>
             {scoreBars.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
-                Chưa có kết quả DISC. Hoàn thành bài đánh giá để xem hồ sơ.
+                {t("dashboard.noDiscResult")}
               </p>
             ) : (
               <div className="space-y-4">
                 {dominant && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Dominant type</span>
+                    <span className="text-sm text-muted-foreground">
+                      {t("dashboard.dominantType")}
+                    </span>
                     <DiscBadge type={dominant} showLabel />
                   </div>
                 )}
@@ -411,129 +419,59 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
 
         <Card>
           <CardHeader>
-            <CardTitle>My status</CardTitle>
-            <CardDescription>Your assessment progress</CardDescription>
+            <CardTitle>{t("dashboard.myStatus")}</CardTitle>
           </CardHeader>
-          <CardContent>
-            {statusPie.length === 0 ? (
+          <CardContent className="space-y-4">
+            {!latestResult?.result ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
-                Chưa được gán bài đánh giá.
+                {t("dashboard.noDiscResult")}
               </p>
             ) : (
               <>
-                <div className="h-[200px]">
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie
-                        data={statusPie}
-                        dataKey="value"
-                        nameKey="label"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={3}
-                        stroke="var(--background)"
-                        strokeWidth={2}
-                      >
-                        {statusPie.map((d) => (
-                          <Cell key={d.type} fill={d.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--popover)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 8,
-                          fontSize: 12,
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div>
+                  <div className="font-semibold">{latestResult.session.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {latestResult.submittedAt
+                      ? new Date(latestResult.submittedAt).toLocaleString(
+                          locale === "vi" ? "vi-VN" : "en-US",
+                        )
+                      : "—"}
+                  </div>
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-2 text-xs">
-                  {statusPie.map((d) => (
-                    <div key={d.type} className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-sm" style={{ background: d.color }} />
-                      <span className="text-muted-foreground">{d.label}</span>
-                      <span className="ml-auto font-semibold tabular-nums">{d.value}</span>
+                {dominant && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      {t("dashboard.dominantType")}
+                    </span>
+                    <DiscBadge type={dominant} showLabel />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {scoreBars.map((item) => (
+                    <div
+                      key={item.type}
+                      className="flex items-center justify-between rounded-lg border px-3 py-2"
+                    >
+                      <span className="font-semibold" style={{ color: item.color }}>
+                        {item.type}
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums">{item.value}%</span>
                     </div>
                   ))}
                 </div>
+                <Button variant="outline" className="w-full" asChild>
+                  <Link
+                    to="/assessments/result"
+                    search={{ participantId: latestResult.participantId }}
+                  >
+                    {t("dashboard.viewResult")}
+                  </Link>
+                </Button>
               </>
             )}
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick actions</CardTitle>
-          <CardDescription>Shortcuts for your assessments</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2">
-          <Link
-            to="/assessments"
-            className="flex items-center gap-3 rounded-lg border p-3 card-hover"
-          >
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
-              <Plus className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">My assessments</div>
-              <div className="text-xs text-muted-foreground">
-                View and complete assigned sessions
-              </div>
-            </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          <Link to="/reports" className="flex items-center gap-3 rounded-lg border p-3 card-hover">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--warning)]/15 text-[var(--warning)]">
-              <Download className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">My reports</div>
-              <div className="text-xs text-muted-foreground">View your personal DISC results</div>
-            </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>My assessments</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/assessments">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {mySessions.slice(0, 5).map((s) => (
-              <MyAssessmentRow key={s.id} session={s} />
-            ))}
-            {mySessions.length === 0 && (
-              <p className="text-sm text-muted-foreground">No assessments assigned to you.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>My reports</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/reports">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="divide-y">
-            {latestReports.map((r) => (
-              <LatestReportRow key={r.participantId} item={r} />
-            ))}
-            {latestReports.length === 0 && (
-              <p className="py-2 text-sm text-muted-foreground">No scored results yet.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      <Separator className="opacity-0" />
     </div>
   );
 }
@@ -541,24 +479,32 @@ function EmployeeDashboard({ isAuthenticated, sessions, history, isLoading }: Da
 function StaffDashboard({
   isAuthenticated,
   sessions,
-  history,
   isLoading,
   teamDiscResults,
   overviewsLoading,
 }: DashboardData) {
   const { displayName } = useAuth();
-  const t = useT();
-  const firstName = displayName.split(/\s+/)[0] || "there";
+  const { locale, t } = useI18n();
+  const firstName = displayName.trim().split(/\s+/).at(-1) || "there";
 
   const openSessions = sessions.filter((s) => s.status === "OPEN");
   const closedSessions = sessions.filter((s) => s.status === "CLOSED");
   const draftSessions = sessions.filter((s) => s.status === "DRAFT");
-  const withResult = history.filter((h) => h.result);
-  const latestReports = withResult.slice(0, 5);
-  const upcoming = openSessions.slice(0, 4);
 
-  const sessionTrend = useMemo(() => buildSessionTrend(sessions), [sessions]);
-  const statusPie = useMemo(() => buildStatusDistribution(sessions), [sessions]);
+  const sessionTrend = useMemo(() => buildSessionTrend(sessions, locale), [sessions, locale]);
+  const statusPie = useMemo(
+    () =>
+      buildStatusDistribution(sessions).map((item) => ({
+        ...item,
+        label:
+          item.type === "OPEN"
+            ? t("dashboard.active")
+            : item.type === "CLOSED"
+              ? t("dashboard.closed")
+              : t("dashboard.drafts"),
+      })),
+    [sessions, t],
+  );
   const discPie = useMemo(() => buildDiscDistribution(teamDiscResults), [teamDiscResults]);
   const hasDiscData = discPie.some((d) => d.count > 0);
 
@@ -567,24 +513,22 @@ function StaffDashboard({
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-            Overview
+            {t("dashboard.overview")}
           </div>
           <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight">
-            Good morning, {firstName}
+            {t("dashboard.greeting", { name: firstName })}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Here's a snapshot of your DISC assessment activity.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("dashboard.staffIntro")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4" />
-            Export
+            {t("dashboard.export")}
           </Button>
           <Button size="sm" asChild>
             <Link to="/assessments/new">
               <Plus className="h-4 w-4" />
-              New Assessment
+              {t("dashboard.newAssessment")}
             </Link>
           </Button>
         </div>
@@ -593,50 +537,66 @@ function StaffDashboard({
       {!isAuthenticated && (
         <Card className="p-4 text-sm text-muted-foreground">
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t("common.signIn")}
           </Link>{" "}
-          to load live dashboard data.
+          {t("dashboard.signInStaff")}
         </Card>
       )}
 
       {isLoading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading live stats…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("dashboard.loadingStats")}
         </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total sessions" value={sessions.length} icon={Users} accent="primary" />
         <StatCard
-          label="Completed"
+          label={t("dashboard.totalSessions")}
+          value={sessions.length}
+          icon={Users}
+          accent="primary"
+        />
+        <StatCard
+          label={t("dashboard.completed")}
           value={closedSessions.length}
           icon={CheckCircle2}
           accent="success"
         />
-        <StatCard label="Active" value={openSessions.length} icon={Clock} accent="warning" />
-        <StatCard label="Drafts" value={draftSessions.length} icon={TrendingUp} accent="primary" />
+        <StatCard
+          label={t("dashboard.active")}
+          value={openSessions.length}
+          icon={Clock}
+          accent="warning"
+        />
+        <StatCard
+          label={t("dashboard.drafts")}
+          value={draftSessions.length}
+          icon={TrendingUp}
+          accent="primary"
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-start justify-between space-y-0">
             <div>
-              <CardTitle>Session activity</CardTitle>
-              <CardDescription>Sessions created in the last 6 months</CardDescription>
+              <CardTitle>{t("dashboard.sessionActivity")}</CardTitle>
+              <CardDescription>{t("dashboard.sessionActivityDesc")}</CardDescription>
             </div>
             <div className="flex gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-primary" /> Created
+                <span className="h-2 w-2 rounded-full bg-primary" /> {t("dashboard.created")}
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/50" /> Closed
+                <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />{" "}
+                {t("dashboard.closed")}
               </span>
             </div>
           </CardHeader>
           <CardContent>
             {sessions.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
-                No session data yet.
+                {t("dashboard.noSessionData")}
               </p>
             ) : (
               <div className="h-[260px] w-full">
@@ -695,12 +655,14 @@ function StaffDashboard({
 
         <Card>
           <CardHeader>
-            <CardTitle>Session status</CardTitle>
-            <CardDescription>Live breakdown of your sessions</CardDescription>
+            <CardTitle>{t("dashboard.sessionStatus")}</CardTitle>
+            <CardDescription>{t("dashboard.sessionStatusDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             {statusPie.length === 0 ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">No sessions yet.</p>
+              <p className="py-16 text-center text-sm text-muted-foreground">
+                {t("dashboard.noSessions")}
+              </p>
             ) : (
               <>
                 <div className="h-[200px]">
@@ -749,13 +711,13 @@ function StaffDashboard({
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Participants by month</CardTitle>
-            <CardDescription>Total assignees on sessions created each month</CardDescription>
+            <CardTitle>{t("dashboard.participantsByMonth")}</CardTitle>
+            <CardDescription>{t("dashboard.participantsByMonthDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             {sessions.length === 0 ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
-                No participant data yet.
+                {t("dashboard.noParticipantData")}
               </p>
             ) : (
               <div className="h-[220px]">
@@ -795,17 +757,17 @@ function StaffDashboard({
 
         <Card>
           <CardHeader>
-            <CardTitle>DISC distribution</CardTitle>
-            <CardDescription>Dominant profiles from managed sessions</CardDescription>
+            <CardTitle>{t("dashboard.discDistribution")}</CardTitle>
+            <CardDescription>{t("dashboard.discDistributionDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             {overviewsLoading ? (
               <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading DISC…
+                <Loader2 className="h-4 w-4 animate-spin" /> {t("dashboard.loadingDisc")}
               </div>
             ) : !hasDiscData ? (
               <p className="py-16 text-center text-sm text-muted-foreground">
-                Chưa có kết quả DISC để hiển thị.
+                {t("dashboard.noDiscToDisplay")}
               </p>
             ) : (
               <>
@@ -855,213 +817,6 @@ function StaffDashboard({
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick actions</CardTitle>
-          <CardDescription>Common shortcuts</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <Link
-            to="/assessments/new"
-            className="flex items-center gap-3 rounded-lg border p-3 card-hover"
-          >
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
-              <Plus className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">Create Assessment</div>
-              <div className="text-xs text-muted-foreground">Assign a new DISC round</div>
-            </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          <Link
-            to="/employees"
-            className="flex items-center gap-3 rounded-lg border p-3 card-hover"
-          >
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--success)]/10 text-[var(--success)]">
-              <UserPlus className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">Invite Employee</div>
-              <div className="text-xs text-muted-foreground">Add teammates to your workspace</div>
-            </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          <Link to="/reports" className="flex items-center gap-3 rounded-lg border p-3 card-hover">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--warning)]/15 text-[var(--warning)]">
-              <Download className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">Export Reports</div>
-              <div className="text-xs text-muted-foreground">Download PDFs & CSVs</div>
-            </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent sessions</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/assessments">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {sessions.slice(0, 5).map((s) => (
-              <SessionActivityRow key={s.id} session={s} />
-            ))}
-            {sessions.length === 0 && (
-              <p className="text-sm text-muted-foreground">No sessions yet.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Upcoming assessments</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/assessments">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {upcoming.map((u) => (
-              <div key={u.id} className="rounded-lg border p-3 card-hover">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{u.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {u.participantCount} participants · {t(sessionStatusMessageKey(u.status))}
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="/assessments">Manage</Link>
-                  </Button>
-                </div>
-              </div>
-            ))}
-            {upcoming.length === 0 && (
-              <p className="text-sm text-muted-foreground">No active sessions.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Latest reports</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/reports">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="divide-y">
-            {latestReports.map((r) => (
-              <LatestReportRow key={r.participantId} item={r} />
-            ))}
-            {latestReports.length === 0 && (
-              <p className="py-2 text-sm text-muted-foreground">No scored results yet.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      <Separator className="opacity-0" />
     </div>
-  );
-}
-
-function MyAssessmentRow({ session }: { session: DiscSessionListItem }) {
-  const t = useT();
-  const status = session.myParticipant?.status;
-  const canTake = session.status === "OPEN" && (!status || isPendingParticipant(status));
-  return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <Avatar className="h-8 w-8">
-        <AvatarFallback className="bg-muted text-xs">
-          {session.title.slice(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{session.title}</div>
-        <div className="text-xs text-muted-foreground">
-          {status
-            ? t(participantStatusMessageKey(status))
-            : t(sessionStatusMessageKey(session.status))}{" "}
-          · {new Date(session.createdAt).toLocaleDateString()}
-        </div>
-      </div>
-      {canTake ? (
-        <Button variant="outline" size="sm" asChild>
-          <Link to="/assessments/questionnaire" search={{ sessionId: session.id }}>
-            {status ? "Continue" : "Take"}
-          </Link>
-        </Button>
-      ) : session.myParticipant?.id && isDoneParticipant(status) ? (
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/assessments/result" search={{ participantId: session.myParticipant.id }}>
-            Result
-          </Link>
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function SessionActivityRow({ session }: { session: DiscSessionListItem }) {
-  const t = useT();
-  return (
-    <div className="flex items-start gap-3">
-      <Avatar className="h-8 w-8">
-        <AvatarFallback className="bg-muted text-xs">
-          {session.title.slice(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1 text-sm">
-        <div className="truncate">
-          <span className="font-medium">{session.title}</span>{" "}
-          <span className="text-muted-foreground">is</span>{" "}
-          <span className="font-medium">{t(sessionStatusMessageKey(session.status))}</span>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {session.participantCount} participants ·{" "}
-          {new Date(session.createdAt).toLocaleDateString()}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LatestReportRow({ item }: { item: DiscHistoryItem }) {
-  const disc = topDimension(item.result);
-  const score = item.result
-    ? Math.round(
-        Math.max(
-          item.result.D_percent,
-          item.result.I_percent,
-          item.result.S_percent,
-          item.result.C_percent,
-        ),
-      )
-    : null;
-  return (
-    <Link
-      to="/assessments/result"
-      search={{ participantId: item.participantId }}
-      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-90"
-    >
-      <Avatar className="h-8 w-8">
-        <AvatarFallback className="bg-muted text-xs">
-          {item.session.title.slice(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{item.session.title}</div>
-        <div className="text-xs text-muted-foreground">
-          {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString() : "—"}
-        </div>
-      </div>
-      {disc && <DiscBadge type={disc} />}
-      <div className="text-sm font-semibold tabular-nums">{score ?? "—"}</div>
-    </Link>
   );
 }

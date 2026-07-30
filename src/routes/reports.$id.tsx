@@ -28,7 +28,7 @@ import {
   type DiscScoreResult,
   type DiscSessionStatus,
 } from "@/lib/api/disc";
-import { participantStatusMessageKey, sessionStatusMessageKey, useT } from "@/lib/i18n";
+import { participantStatusMessageKey, sessionStatusMessageKey, useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reports/$id")({
@@ -57,10 +57,10 @@ const participantStatusStyle: Record<DiscParticipantStatus, string> = {
   VERIFIED: "bg-[var(--success)]/10 text-[var(--success)] border-[var(--success)]/25",
 };
 
-function formatDate(value?: string | null) {
+function formatDate(value: string | null | undefined, locale: string) {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString(locale === "vi" ? "vi-VN" : "en-US");
 }
 
 function emailName(email: string) {
@@ -91,7 +91,7 @@ function SessionReportPage() {
 function MySessionReport() {
   const { id: sessionId } = Route.useParams();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const t = useT();
+  const { t } = useI18n();
 
   const historyQuery = useQuery({
     queryKey: ["disc", "history", "me"],
@@ -111,39 +111,37 @@ function MySessionReport() {
             to="/reports"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> My reports
+            <ArrowLeft className="h-3.5 w-3.5" /> {t("reports.backMine")}
           </Link>
         </div>
 
         {!isAuthenticated && !authLoading && (
           <Card className="p-4 text-sm text-muted-foreground">
             <Link to="/login" className="font-medium text-primary hover:underline">
-              Sign in
+              {t("common.signIn")}
             </Link>{" "}
-            to view this report.
+            {t("reports.signInDetail")}
           </Card>
         )}
 
         {(authLoading || (isAuthenticated && historyQuery.isLoading)) && (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t("reports.loadingDetail")}
           </div>
         )}
 
         {historyQuery.isError && (
           <Card className="p-4 text-sm text-destructive">
-            {(historyQuery.error as Error)?.message || "Failed to load report"}
+            {(historyQuery.error as Error)?.message || t("reports.loadDetailFailed")}
           </Card>
         )}
 
         {isAuthenticated && !historyQuery.isLoading && !mine && (
           <Card className="p-6 text-center space-y-3">
-            <h1 className="text-lg font-semibold">Not available</h1>
-            <p className="text-sm text-muted-foreground">
-              You can only view reports for sessions you participated in.
-            </p>
+            <h1 className="text-lg font-semibold">{t("reports.notAvailable")}</h1>
+            <p className="text-sm text-muted-foreground">{t("reports.personalOnly")}</p>
             <Button asChild variant="outline">
-              <Link to="/reports">Back to my reports</Link>
+              <Link to="/reports">{t("reports.backToMine")}</Link>
             </Button>
           </Card>
         )}
@@ -154,14 +152,12 @@ function MySessionReport() {
               <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
                 {mine.session.title}
               </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Your personal result for this session
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("reports.personalResult")}</p>
             </header>
 
             <Card>
               <CardHeader>
-                <CardTitle>Your participation</CardTitle>
+                <CardTitle>{t("reports.yourParticipation")}</CardTitle>
                 <CardDescription>
                   {t("employees.colStatus")} {t(participantStatusMessageKey(mine.status))}
                 </CardDescription>
@@ -169,7 +165,7 @@ function MySessionReport() {
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Status</div>
+                    <div className="text-xs text-muted-foreground">{t("reports.status")}</div>
                     <div className="mt-1">
                       <Badge
                         variant="outline"
@@ -180,11 +176,11 @@ function MySessionReport() {
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">DISC</div>
+                    <div className="text-xs text-muted-foreground">{t("reports.disc")}</div>
                     <div className="mt-1">{disc ? <DiscBadge type={disc} showLabel /> : "—"}</div>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Top score</div>
+                    <div className="text-xs text-muted-foreground">{t("reports.topScore")}</div>
                     <div className="mt-1 text-lg font-semibold tabular-nums">{score ?? "—"}</div>
                   </div>
                 </div>
@@ -197,7 +193,7 @@ function MySessionReport() {
                           to="/assessments/result"
                           search={{ participantId: mine.participantId }}
                         >
-                          View full result
+                          {t("reports.viewFullResult")}
                         </Link>
                       </Button>
                       <Button
@@ -209,18 +205,18 @@ function MySessionReport() {
                               `disc-report-${mine.session.title.replace(/[^\w-]+/g, "-").slice(0, 40)}.pdf`,
                             );
                           } catch (err) {
-                            alert(err instanceof Error ? err.message : "PDF download failed");
+                            alert(err instanceof Error ? err.message : t("reports.pdfFailed"));
                           }
                         }}
                       >
                         <Download className="h-4 w-4" />
-                        Download PDF
+                        {t("reports.downloadPdf")}
                       </Button>
                     </>
                   ) : (
                     <Button asChild>
                       <Link to="/assessments/questionnaire" search={{ sessionId: mine.session.id }}>
-                        Continue assessment
+                        {t("reports.continueAssessment")}
                       </Link>
                     </Button>
                   )}
@@ -237,7 +233,7 @@ function MySessionReport() {
 function StaffSessionReport() {
   const { id: sessionId } = Route.useParams();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const t = useT();
+  const { locale, t } = useI18n();
   const [q, setQ] = useState("");
   const [pdfError, setPdfError] = useState<string | null>(null);
 
@@ -267,29 +263,28 @@ function StaffSessionReport() {
             to="/reports"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> All session reports
+            <ArrowLeft className="h-3.5 w-3.5" /> {t("reports.backAll")}
           </Link>
         </div>
 
         {!isAuthenticated && !authLoading && (
           <Card className="p-4 text-sm text-muted-foreground">
             <Link to="/login" className="font-medium text-primary hover:underline">
-              Sign in
+              {t("common.signIn")}
             </Link>{" "}
-            to view this session report.
+            {t("reports.signInSessionDetail")}
           </Card>
         )}
 
         {(authLoading || (isAuthenticated && overviewQuery.isLoading)) && (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading session overview…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t("reports.loadingOverview")}
           </div>
         )}
 
         {overviewQuery.isError && (
           <Card className="p-4 text-sm text-destructive">
-            {(overviewQuery.error as Error)?.message ||
-              "Failed to load session overview. You may need to be the session manager."}
+            {(overviewQuery.error as Error)?.message || t("reports.loadOverviewFailed")}
           </Card>
         )}
 
@@ -309,45 +304,50 @@ function StaffSessionReport() {
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {overview.description || "Session DISC report"}
+                  {overview.description || t("reports.sessionReport")}
                 </p>
               </div>
             </header>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Card className="p-4">
-                <div className="text-xs text-muted-foreground">Participants</div>
+                <div className="text-xs text-muted-foreground">{t("reports.participants")}</div>
                 <div className="mt-1 flex items-center gap-2 text-lg font-semibold tabular-nums">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   {overview.participantCount}
                 </div>
               </Card>
               <Card className="p-4">
-                <div className="text-xs text-muted-foreground">With results</div>
+                <div className="text-xs text-muted-foreground">{t("reports.withResults")}</div>
                 <div className="mt-1 text-lg font-semibold tabular-nums">{withResult}</div>
               </Card>
               <Card className="p-4">
-                <div className="text-xs text-muted-foreground">Verified</div>
+                <div className="text-xs text-muted-foreground">{t("reports.verified")}</div>
                 <div className="mt-1 text-lg font-semibold tabular-nums">{verified}</div>
               </Card>
               <Card className="p-4">
-                <div className="text-xs text-muted-foreground">Created</div>
-                <div className="mt-1 text-sm font-medium">{formatDate(overview.createdAt)}</div>
+                <div className="text-xs text-muted-foreground">{t("reports.created")}</div>
+                <div className="mt-1 text-sm font-medium">
+                  {formatDate(overview.createdAt, locale)}
+                </div>
               </Card>
             </div>
 
             <Card>
               <CardHeader>
-                <CardTitle>Participant results</CardTitle>
+                <CardTitle>{t("reports.participantResults")}</CardTitle>
                 <CardDescription>
-                  {participants.length} of {overview.participantCount} shown
+                  {t("reports.resultsShown", {
+                    shown: participants.length,
+                    total: overview.participantCount,
+                  })}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search by email…"
+                    placeholder={t("reports.searchEmail")}
                     className="pl-8"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
@@ -364,11 +364,11 @@ function StaffSessionReport() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
-                        <TableHead>Participant</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>DISC</TableHead>
-                        <TableHead>Top score</TableHead>
-                        <TableHead>Submitted</TableHead>
+                        <TableHead>{t("reports.participant")}</TableHead>
+                        <TableHead>{t("reports.status")}</TableHead>
+                        <TableHead>{t("reports.disc")}</TableHead>
+                        <TableHead>{t("reports.topScore")}</TableHead>
+                        <TableHead>{t("reports.submitted")}</TableHead>
                         <TableHead />
                       </TableRow>
                     </TableHeader>
@@ -379,7 +379,7 @@ function StaffSessionReport() {
                             colSpan={6}
                             className="h-24 text-center text-sm text-muted-foreground"
                           >
-                            No participants match this search.
+                            {t("reports.noParticipantMatch")}
                           </TableCell>
                         </TableRow>
                       )}
@@ -424,7 +424,7 @@ function StaffSessionReport() {
                               {score ?? "—"}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
-                              {formatDate(p.submittedAt)}
+                              {formatDate(p.submittedAt, locale)}
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-2">
@@ -435,7 +435,7 @@ function StaffSessionReport() {
                                         to="/assessments/result"
                                         search={{ participantId: p.id }}
                                       >
-                                        View
+                                        {t("reports.view")}
                                       </Link>
                                     </Button>
                                     <Button
@@ -452,7 +452,7 @@ function StaffSessionReport() {
                                           setPdfError(
                                             err instanceof Error
                                               ? err.message
-                                              : "PDF download failed",
+                                              : t("reports.pdfFailed"),
                                           );
                                         }
                                       }}
@@ -463,7 +463,7 @@ function StaffSessionReport() {
                                   </>
                                 ) : p.status !== "SUBMITTED" ? (
                                   <span className="text-xs text-muted-foreground">
-                                    No result yet
+                                    {t("reports.noResultYet")}
                                   </span>
                                 ) : null}
                               </div>

@@ -31,11 +31,31 @@ const CRUMB_KEYS: Record<string, MessageKey> = {
   questionnaire: "nav.questionnaire",
 };
 
+const THEME_STORAGE_KEY = "disc-ui-theme";
+
 function useDarkMode() {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState<boolean | null>(null);
+
   useEffect(() => {
+    let storedTheme: string | null = null;
+    try {
+      storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    } catch {
+      /* Keep the default light theme when storage is unavailable. */
+    }
+    setDark(storedTheme === "dark");
+  }, []);
+
+  useEffect(() => {
+    if (dark === null) return;
     document.documentElement.classList.toggle("dark", dark);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, dark ? "dark" : "light");
+    } catch {
+      /* Theme still works for the current page when storage is unavailable. */
+    }
   }, [dark]);
+
   return { dark, setDark };
 }
 
@@ -82,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setDark(!dark)}
+                onClick={() => setDark((current) => !current)}
                 aria-label={t("common.toggleTheme")}
               >
                 {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
