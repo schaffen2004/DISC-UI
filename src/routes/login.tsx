@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
+import { forgotPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { useT } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -32,15 +33,19 @@ function LoginPage() {
   const { login } = useAuth();
   const { registered } = Route.useSearch();
   const t = useT();
+  const [mode, setMode] = useState<"signin" | "forgot">("signin");
   const [username, setUsername] = useState(registered ?? "");
   const [password, setPassword] = useState("");
+  const [forgotEmail, setForgotEmail] = useState(registered ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setSubmitting(true);
     try {
       await login(username.trim(), password);
@@ -53,6 +58,35 @@ function LoginPage() {
             ? err.message
             : t("auth.loginFailed");
       setError(formatLoginError(raw, t));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setSubmitting(true);
+    try {
+      const result = await forgotPassword(forgotEmail.trim());
+      setSuccess(
+        t("auth.forgotPasswordSuccess", {
+          email: result.email,
+          password: result.temporaryPassword,
+        }),
+      );
+      setUsername(result.email);
+      setPassword(result.temporaryPassword);
+      setMode("signin");
+    } catch (err) {
+      const raw =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : t("auth.forgotPasswordFailed");
+      setError(formatForgotPasswordError(raw, t));
     } finally {
       setSubmitting(false);
     }
@@ -71,61 +105,116 @@ function LoginPage() {
             </div>
             <span className="text-sm font-semibold">DigiWork</span>
           </div>
-          <h1 className="mt-10 text-3xl font-semibold tracking-tight">{t("auth.welcomeBack")}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{t("auth.signInSubtitle")}</p>
+          <h1 className="mt-10 text-3xl font-semibold tracking-tight">
+            {mode === "forgot" ? t("auth.forgotPasswordTitle") : t("auth.welcomeBack")}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {mode === "forgot" ? t("auth.forgotPasswordHint") : t("auth.signInSubtitle")}
+          </p>
 
-          {registered && (
+          {registered && mode === "signin" && !success && (
             <div className="mt-6 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/5 px-3 py-2 text-sm text-[var(--success)]">
               {t("auth.accountCreated", { email: registered })}
             </div>
           )}
 
-          <form className="mt-8 space-y-4" onSubmit={handleSignIn}>
-            <div className="space-y-2">
-              <Label htmlFor="username">{t("auth.username")}</Label>
-              <Input
-                id="username"
-                type="text"
-                autoComplete="username"
-                placeholder="you@company.com"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
+          {success && (
+            <div className="mt-6 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/5 px-3 py-2 text-sm text-[var(--success)]">
+              {success}
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">{t("auth.password")}</Label>
-                <a href="#" className="text-xs font-medium text-primary hover:underline">
-                  {t("auth.forgotPassword")}
-                </a>
+          )}
+
+          {mode === "signin" ? (
+            <form className="mt-8 space-y-4" onSubmit={handleSignIn}>
+              <div className="space-y-2">
+                <Label htmlFor="username">{t("auth.username")}</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="you@company.com"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
               </div>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox id="remember" defaultChecked />
-              <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
-                {t("auth.rememberMe")}
-              </Label>
-            </div>
-            {error && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                {error}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">{t("auth.password")}</Label>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline"
+                    onClick={() => {
+                      setError(null);
+                      setSuccess(null);
+                      setForgotEmail(username.trim() || registered || "");
+                      setMode("forgot");
+                    }}
+                  >
+                    {t("auth.forgotPassword")}
+                  </button>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
-            )}
-            <Button className="w-full" size="lg" type="submit" disabled={submitting}>
-              {submitting ? t("auth.signingIn") : t("auth.signIn")}
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </form>
+              <div className="flex items-center gap-2">
+                <Checkbox id="remember" defaultChecked />
+                <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
+                  {t("auth.rememberMe")}
+                </Label>
+              </div>
+              {error && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+              <Button className="w-full" size="lg" type="submit" disabled={submitting}>
+                {submitting ? t("auth.signingIn") : t("auth.signIn")}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </form>
+          ) : (
+            <form className="mt-8 space-y-4" onSubmit={handleForgotPassword}>
+              <div className="space-y-2">
+                <Label htmlFor="forgot-email">{t("auth.email")}</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@company.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                />
+              </div>
+              {error && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+              <Button className="w-full" size="lg" type="submit" disabled={submitting}>
+                {submitting ? t("auth.forgotPasswordSubmitting") : t("auth.forgotPasswordSubmit")}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <button
+                type="button"
+                className="w-full text-center text-xs font-medium text-primary hover:underline"
+                onClick={() => {
+                  setError(null);
+                  setMode("signin");
+                }}
+              >
+                {t("auth.backToSignIn")}
+              </button>
+            </form>
+          )}
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
             {t("auth.noAccount")}{" "}
@@ -199,5 +288,18 @@ function formatLoginError(message: string, t: (key: MessageKey) => string) {
       return t("auth.userDeleted");
     default:
       return message || t("auth.loginFailed");
+  }
+}
+
+function formatForgotPasswordError(message: string, t: (key: MessageKey) => string) {
+  switch (message) {
+    case "EMAIL_NOT_FOUND":
+    case "Not Found":
+      return t("auth.forgotPasswordEmailNotFound");
+    case "USER_LOCKED":
+    case "USER_IS_LOCK":
+      return t("auth.userLocked");
+    default:
+      return message || t("auth.forgotPasswordFailed");
   }
 }

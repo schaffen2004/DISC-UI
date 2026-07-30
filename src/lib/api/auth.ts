@@ -60,6 +60,20 @@ export function getMe() {
   return apiFetch<UserProfile>("/user/me");
 }
 
+export type ForgotPasswordResult = {
+  email: string;
+  temporaryPassword: string;
+};
+
+/** Resets password to the default temporary password when the email is registered. */
+export function forgotPassword(email: string) {
+  const query = new URLSearchParams({ email: email.trim() });
+  return apiFetch<ForgotPasswordResult>(`/auth/reset-password?${query}`, {
+    method: "GET",
+    auth: false,
+  });
+}
+
 export function displayName(user: UserProfile | null | undefined) {
   if (!user) return "User";
   const full = user.profile?.fullName?.trim();
